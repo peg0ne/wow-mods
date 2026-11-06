@@ -1,0 +1,6 @@
+## Interface: 16001
+## Title: Återvinningscentralen
+## Notes: Sells your gray items and repairs your gear when you open a vendor. Hold Shift while opening the vendor to skip. /avc for settings.
+## Version: 0.1
+## SavedVariables: AtervinningscentralenDB
+Core.lua
