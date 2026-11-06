@@ -14,8 +14,28 @@ Guild addons are named after Swedish public institutions and companies.
 | QuestLogSort | Puts completed quests last in the quest log and tracker; sorts the tracker by level |
 
 Guild addons share data through `C_ChatInfo.SendAddonMessage` on the GUILD channel and store it in SavedVariables.
+The five addons above aren't in this repo. They live only in the AddOns folder.
 
-## Accepted ideas (not started)
+## This repo
+
+New addons are built here, one folder per addon (`Name/Name.toc` + Lua files).
+Run `.\link.ps1` from PowerShell to link every addon here into
+`C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns` as a directory junction.
+The game then loads straight from the repo, so edit, `/reload`, and test.
+
+Conventions (matching the existing addons):
+- Folder and SavedVariables names are ASCII (`Atervinningscentralen`); `## Title` keeps the Swedish spelling.
+- Chat output is in Swedish, starting with a colored addon name and a lowercase sentence.
+- TOC `## Notes` are in English.
+- Once released, never rename the folder or SavedVariables names, or saved data is lost.
+
+## Built
+
+| Addon | Version | Status |
+|---|---|---|
+| Atervinningscentralen | 0.1 | Built, not yet tested in game |
+
+## Accepted ideas
 
 ### Skolverket: guild crafting directory
 - Saves each member's recipes when they open a profession window (`GetNumTradeSkills` / `GetTradeSkillInfo`). Enchanting uses the Craft API (`GetNumCrafts` / `GetCraftInfo`), so it needs separate handling.
@@ -32,12 +52,14 @@ Guild addons share data through `C_ChatInfo.SendAddonMessage` on the GUILD chann
 - Shares those reports with the guild.
 - Warns you when a reported player shows up on your nameplates (`NAME_PLATE_UNIT_ADDED`), your target or the combat log, for example "⚠ Gankarn spotted (3 reports)".
 
-### Auto-sell junk and auto-repair (not a guild addon)
-Possible name: **Återvinningscentralen** (Swedish for recycling centre).
-- On `MERCHANT_SHOW`, sells all gray (quality 0) items in your bags and prints the total.
-- Repairs all gear if the merchant can repair (`CanMerchantRepair`, `GetRepairAllCost`, `RepairAllItems`).
-- Prints a summary like "Sold 7 items for 1g 23s, repaired for 45s".
-- Possible extra: let Skatteverket count the gray sales as taxable vendor income, or keep them out of the tax. Needs a decision.
+### Återvinningscentralen: auto-sell junk and auto-repair (built, v0.1)
+- On `MERCHANT_SHOW`, sells all gray items with a sell price, 6 items every 0.2 s. It stops immediately if the vendor closes, because using an item away from a vendor would equip it.
+- Then repairs everything if the vendor can and you can afford it, so the junk money helps pay.
+- Prints "sålde 7 saker för 1g 23s, lagade utrustningen för 45s."
+- Holding Shift while opening the vendor skips everything. `/avc` shows settings, `/avc sälj` and `/avc laga` toggle selling and repairing.
+- Supports both `C_Container` and the older global bag functions, because it's unknown which one this client has.
+- Tax: Skatteverket counts gold gained at an open vendor, so gray sales are taxed exactly like selling by hand. Repairs don't affect the tax.
+- Ideas for later: personal never-sell list, guild-funded repairs, vendor restocking.
 
 ### Combined bags (interface)
 - Replaces the separate bag frames with one window: a search box, item quality borders, a free-slot counter, and junk greyed out (shares the gray-item logic with Återvinningscentralen).
