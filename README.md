@@ -50,6 +50,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Rattsmedicinalverket | 0.1 | Works in game (killer, level, ability, position from the Death Recap) |
 | Polisen | 0.1 | Loads without errors; reports need a death to a hostile player |
 | Dodsannonser | 0.1 | Built, not yet tested in game |
+| Handlaggaren | 0.1 | Built, not yet tested in game |
 
 ## Accepted ideas
 
@@ -110,11 +111,12 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 - Turn the whole icon red when out of range and blue when out of mana (hook the action button update, `IsActionInRange` / `IsUsableAction`).
 - Only visual changes. Don't move secure bars in combat.
 
-### Quest automation
-- Accept and turn in quests automatically (`QUEST_DETAIL` → `AcceptQuest`, `QUEST_PROGRESS` → `CompleteQuest`, `QUEST_COMPLETE` → `GetQuestReward`). Holding Shift skips the automation.
-- Skip the gossip dialog when it has only one option.
-- With several rewards: highlight the one with the highest vendor price (from `GetItemInfo`) instead of picking it, or pick it if the user turns that setting on.
-- Share new quests with the party automatically (`QuestLogPushQuest`). Works well with Arbetsförmedlingen.
+### Handläggaren: quest automation (built, v0.1)
+- At a quest giver it hands in finished quests first, then picks up new ones (through `C_GossipInfo`, or the older quest greeting window), accepts them and completes them. Holding Shift when the window opens skips that conversation.
+- Never hands in a quest that costs gold. Gray quests are skipped unless `/hl grå`.
+- With several rewards it marks the one with the highest sell price with a coin icon. `/hl belöning` picks it automatically and prints what was chosen.
+- `/hl dela` shares newly accepted quests with your group (off by default). `/hl prat` chooses an NPC's only chat option (off by default, because some single options set your hearthstone or open a vendor).
+- `/hl` shows the settings, `/hl av` / `/hl på` turns the whole addon off or on.
 
 ### Utmärkelser: homemade achievements (social)
 - This client has no achievements. Events trigger them: `PLAYER_LEVEL_UP`, looting an epic, profession reaching 300, `UPDATE_FACTION` (exalted), first mount, boss kills (`UNIT_DIED` in the combat log), a run without dying.

@@ -1,0 +1,6 @@
+## Interface: 16001
+## Title: Handläggaren
+## Notes: Quest paperwork, handled: accepts quests and turns in finished ones automatically (hold Shift to skip), marks the most valuable reward, and can share new quests with your group. /hl for settings.
+## Version: 0.1
+## SavedVariables: HandlaggarenDB
+Core.lua
