@@ -30,6 +30,9 @@ local function Money(copper)
 	return string.format("%dc", c)
 end
 
+-- Forever's client has C_Item.GetItemInfo but not the old global.
+local GetItemInfo = GetItemInfo or (C_Item and C_Item.GetItemInfo)
+
 -- Bag API: C_Container on newer clients, the old globals on older ones.
 local C = C_Container
 local NumSlots = (C and C.GetContainerNumSlots) or GetContainerNumSlots

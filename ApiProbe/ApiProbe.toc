@@ -1,0 +1,6 @@
+## Interface: 16001
+## Title: ApiProbe (dev)
+## Notes: Development tool: records which game API functions this client has, into SavedVariables, so addons can be written for it. /probe prints a summary. Safe to disable.
+## Version: 0.1
+## SavedVariables: ApiProbeDB
+ApiProbe.lua
