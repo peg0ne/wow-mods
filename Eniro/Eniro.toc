@@ -1,0 +1,8 @@
+## Interface: 16001
+## Title: Eniro
+## Notes: Where your guild is, for THÖNDERSTÖRM: /eniro lists online members by zone and level, with whisper and invite buttons. Members who turn on position sharing show on the world map with their distance from you.
+## Version: 0.1
+## SavedVariablesPerCharacter: EniroCharDB
+Core.lua
+Map.lua
+Window.lua

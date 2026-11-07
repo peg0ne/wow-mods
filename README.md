@@ -36,6 +36,7 @@ Conventions (matching the existing addons):
 |---|---|---|
 | Atervinningscentralen | 0.1 | Built; loads in game (`/avc` works), vendor run not yet tested |
 | Skolverket | 0.1 | Built, not yet tested in game |
+| Eniro | 0.1 | Built, not yet tested in game |
 
 ## Accepted ideas
 
@@ -48,10 +49,11 @@ Conventions (matching the existing addons):
 - Item tooltips get a line: "Skolverket: Pelle, Kalle" (green online, grey offline).
 - Limitations for now: a member's data spreads only while that member is online (nobody passes on someone else's data). Cooldowns only update when the owner opens the profession window.
 
-### Eniro: where guild members are
-- Basic version: zone and level come from the guild roster (`GetGuildRosterInfo`), so it sends no data.
-- Optional version: an opt-in setting shares each player's exact position (`C_Map.GetBestMapForUnit` + `C_Map.GetPlayerMapPosition`) on a slow timer and shows guild members as pins on the world map.
-- "Nearby and around your level" list; could be added to Platsbanken.
+### Eniro: where guild members are (built, v0.1)
+- `/eniro` (or `/hitta`): online members from the guild roster with class color, level (colored by difficulty) and zone. Same zone first, then nearest, then closest in level. Filters: all, my zone, my level ±5. Whisper and invite buttons.
+- Position sharing is opt-in per character (`/eniro dela` or the checkbox). While it's on, your position is sent every 10 s when you move and every 60 s when you stand still, never from inside an instance. Positions expire after 90 s.
+- Members who share appear as class-colored dots on the world map, including on the continent map (through `C_Map.GetMapRectOnMap`). The list shows distance in metres (through `C_Map.GetWorldPosFromMapPos`).
+- Ideas for later: dots on the minimap, a "nearby" column in Platsbanken.
 
 ### Polisen: shared PvP incident log
 - Reads `COMBAT_LOG_EVENT_UNFILTERED` to detect when a hostile player kills you or a guild member, then records who, where, their level and class, and the time.
