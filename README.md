@@ -37,6 +37,8 @@ Conventions (matching the existing addons):
 | Atervinningscentralen | 0.1 | Built; loads in game (`/avc` works), vendor run not yet tested |
 | Skolverket | 0.1 | Built, not yet tested in game |
 | Eniro | 0.1 | Built, not yet tested in game |
+| Rattsmedicinalverket | 0.1 | Built, not yet tested in game |
+| Polisen | 0.1 | Built, not yet tested in game |
 
 ## Accepted ideas
 
@@ -55,10 +57,18 @@ Conventions (matching the existing addons):
 - Members who share appear as class-colored dots on the world map, including on the continent map (through `C_Map.GetMapRectOnMap`). The list shows distance in metres (through `C_Map.GetWorldPosFromMapPos`).
 - Ideas for later: dots on the minimap, a "nearby" column in Platsbanken.
 
-### Polisen: shared PvP incident log
-- Reads `COMBAT_LOG_EVENT_UNFILTERED` to detect when a hostile player kills you or a guild member, then records who, where, their level and class, and the time.
-- Shares those reports with the guild.
-- Warns you when a reported player shows up on your nameplates (`NAME_PLATE_UNIT_ADDED`), your target or the combat log, for example "⚠ Gankarn spotted (3 reports)".
+### Rättsmedicinalverket: shared death detection (built, v0.1)
+- A library addon for everything that needs to know who died and what killed them: Polisen now; Dödsannonser, SCB and Utmärkelser later.
+- Each player reads their own combat log and keeps the damage they took in the last 10 s. On `PLAYER_DEAD` it builds a record: the killing blow (player, pet, NPC or environment such as falling or drowning), the killer's level, class and race if known, the zone and the position. If a pet or guard landed the killing blow, it also blames the hostile player who did the most damage.
+- Sends the record to the guild (prefix `RMV`), keeps the last 500 deaths in `RattsmedicinalverketDB.deaths`, and calls listeners registered with `Rattsmedicinalverket.Register(fn)`. The record format is documented at the top of `Core.lua`.
+- Only deaths of members running the addon are known.
+
+### Polisen: shared PvP incident log (built, v0.1)
+- Requires Rättsmedicinalverket. Every death to a hostile player (or blamed on one) becomes an incident. Incidents are kept for 30 days.
+- Members who were offline catch up on login: one online member sends them up to 40 newer incidents (prefix `POLIS`).
+- Warns you when a reported player appears on a nameplate, your target, mouseover, or in the combat log: a chat line, plus a raid-warning text and sound (`/polisen larm` toggles the warning and sound). It tells the guild once every 5 minutes per player, and `/polisen tyst` hides other members' sightings.
+- Reported players' tooltips show their number of reports and their latest victim.
+- `/polisen` window: Efterlysta (wanted, with "Glöm" to forget a player locally) and Händelser (incidents).
 
 ### Återvinningscentralen: auto-sell junk and auto-repair (built, v0.1)
 - On `MERCHANT_SHOW`, sells all gray items with a sell price, 6 items every 0.2 s. It stops immediately if the vendor closes, because using an item away from a vendor would equip it.
