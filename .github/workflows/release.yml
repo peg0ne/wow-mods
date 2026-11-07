@@ -1,0 +1,46 @@
+# Pushing a tag like v1.0 zips every addon folder (a folder with a .toc of
+# the same name, except the ApiProbe dev tool) into one zip and publishes it
+# as a GitHub release, which WowUp-CF picks up as an update.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Zip the addons
+        run: |
+          zipname="wow-mods-${GITHUB_REF_NAME}.zip"
+          addons=""
+          for d in */; do
+            d="${d%/}"
+            if [ -f "$d/$d.toc" ] && [ "$d" != "ApiProbe" ]; then addons="$addons $d"; fi
+          done
+          echo "Addons:$addons"
+          mkdir dist
+          zip -r -X "dist/$zipname" $addons -x '*.md'
+          # Tells WowUp which zip fits which client. The Forever client is not
+          # a standard flavor, so the same zip is offered for all of them.
+          cat > dist/release.json <<EOF
+          {"releases":[{"filename":"$zipname","nolib":false,"metadata":[
+            {"flavor":"classic","interface":16001},
+            {"flavor":"mainline","interface":16001},
+            {"flavor":"bcc","interface":16001},
+            {"flavor":"wrath","interface":16001},
+            {"flavor":"cata","interface":16001},
+            {"flavor":"mists","interface":16001}
+          ]}]}
+          EOF
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes

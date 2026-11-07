@@ -24,6 +24,11 @@ Run `.\link.ps1` from PowerShell to link every addon here into
 `C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns` as a directory junction.
 The game then loads straight from the repo, so edit, `/reload`, and test.
 
+Releases: pushing a tag like `v1.1` (`git tag v1.1; git push origin v1.1`) runs `.github/workflows/release.yml`,
+which zips every addon except ApiProbe into a GitHub release on https://github.com/peg0ne/wow-mods.
+Guild members install it once in WowUp-CF (Get Addons → Install from URL → the repo link) and get updates from then on.
+Don't install them through WowUp on the dev machine: it would replace the junctions from `link.ps1`.
+
 Conventions (matching the existing addons):
 - Folder and SavedVariables names are ASCII (`Atervinningscentralen`); `## Title` keeps the Swedish spelling.
 - Chat output is in Swedish, starting with a colored addon name and a lowercase sentence.
