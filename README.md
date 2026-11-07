@@ -47,8 +47,8 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Atervinningscentralen | 0.1 | Works in game (sells grays, repairs) |
 | Skolverket | 0.1 | Works in game for your own recipes and the item tooltip; guild sync not yet tested (needs a second member) |
 | Eniro | 0.1 | Works in game (member list); position sharing not yet tested (needs a second member) |
-| Rattsmedicinalverket | 0.1 | Built, not yet tested in game |
-| Polisen | 0.1 | Built, not yet tested in game |
+| Rattsmedicinalverket | 0.1 | Works in game (killer, level, ability, position from the Death Recap) |
+| Polisen | 0.1 | Loads without errors; reports need a death to a hostile player |
 
 ## Accepted ideas
 
