@@ -39,6 +39,14 @@ local NAMES = {
 	"C_TradeSkillUI.OpenTradeSkill", "ProfessionsFrame", "TradeSkillFrame", "C_Item.GetItemNameByID",
 	"C_TooltipInfo", "Enum.TooltipDataType.Item", "Enum.TooltipDataType.Unit", "C_Spell.GetSpellCooldown",
 	"UnitIsFriend", "UnitIsEnemy", "PlaySound", "GetRealZoneText", "C_Map.GetMapInfo",
+	-- round 3: does the default UI already have these backlog features?
+	"GetAchievementInfo", "C_AchievementInfo", "AchievementFrame", "GetTotalAchievementPoints",
+	"C_Container.SortBags", "ContainerFrameCombinedBags", "BagItemAutoSortButton",
+	"MainMenuBarArtFrame", "MainActionBar", "MultiBarBottomLeft", "EditModeManagerFrame", "ActionButton1",
+	"ChatFrame_AddMessageEventFilter", "Screenshot", "DoEmote", "C_ChatInfo.PerformEmote",
+	"C_QuestLog.SetSelectedQuest", "QuestLogPushQuest", "C_GossipInfo.GetAvailableQuests", "C_GossipInfo.SelectOption",
+	"GetQuestReward", "AcceptQuest", "CompleteQuest", "GetNumQuestChoices", "GetQuestItemLink",
+	"COMBATLOG_XPGAIN_FIRSTPERSON", "SOUNDKIT.UI_BNET_TOAST", "SendChatMessage", "RequestTimePlayed",
 }
 
 -- Events that may or may not exist on this client.
@@ -131,6 +139,16 @@ local function Probe()
 				table.insert(result.professions, { name = name, rank = rank, max = max, skillLine = skillLine })
 			end
 		end
+	end
+	-- Settings that tell whether a built-in feature is in use.
+	result.cvars = {}
+	for _, cvar in ipairs({ "combinedBags", "taintLog", "scriptErrors" }) do
+		local ok, value = pcall(GetCVar, cvar)
+		result.cvars[cvar] = ok and value or "error"
+	end
+	if GetTotalAchievementPoints then
+		local ok, points = pcall(GetTotalAchievementPoints)
+		result.achievementPoints = ok and points or "error"
 	end
 	result.blocked = ApiProbeBlocked
 	result.time = time()
