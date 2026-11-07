@@ -14,7 +14,8 @@
 --                                              professions missing from it)
 --   G;owner;prof                               owner: please send this profession
 --   P;version;prof;stamp;part;total;key,...    a profession's recipes, in parts
--- Recipe keys: i<itemID> for items, e<spellID> for enchants. A key may end
+-- Recipe keys: i<itemID> for recipes that make an item, e<recipeID> (a
+-- spell ID) for the rest, such as enchants. A key may end
 -- in @<seconds>: a cooldown recipe, ready in that many seconds (0 = ready).
 --
 -- Saved data: SkolverketCharDB.profs holds this character's own professions,
@@ -35,6 +36,14 @@ local requested = {}         -- "owner;prof" -> GetTime() we last wanted it (or 
 local heard = {}             -- "owner;prof" -> GetTime() we last heard someone ask for it
 local sentProf = {}          -- prof -> GetTime() we last sent it
 local lastHello, lastAnswer, lastAsk, warnedVersion = nil, 0, 0, false
+
+-- Forever's client has the modern API only: C_Item and C_Spell, not the
+-- old globals.
+local GetItemInfo = GetItemInfo or (C_Item and C_Item.GetItemInfo)
+local function SpellName(id)
+	if C_Spell and C_Spell.GetSpellName then return C_Spell.GetSpellName(id) end
+	if GetSpellInfo then return (GetSpellInfo(id)) end
+end
 
 local function Print(text)
 	DEFAULT_CHAT_FRAME:AddMessage("|cffff9933Skolverket:|r " .. text)
@@ -145,7 +154,7 @@ function ns.Name(key)
 		n = GetItemInfo(id)
 		if not n then nameWaiting[id] = key end
 	else
-		n = GetSpellInfo(id)
+		n = SpellName(id)
 	end
 	if n then db.names[key] = n end
 	return n
@@ -172,9 +181,10 @@ function ns.Link(key)
 	if key:sub(1, 1) == "i" then
 		local link = select(2, GetItemInfo(id))
 		if link then return link end
+		return string.format("|cffffffff|Hitem:%d|h[%s]|h|r", id, ns.Name(key) or ("#" .. id))
 	end
-	local kind = key:sub(1, 1) == "i" and "item" or "enchant"
-	return string.format("|cffffd000|H%s:%d|h[%s]|h|r", kind, id, ns.Name(key) or ("#" .. id))
+	local link = C_Spell and C_Spell.GetSpellLink and C_Spell.GetSpellLink(id)
+	return link or string.format("|cff71d5ff|Hspell:%d|h[%s]|h|r", id, ns.Name(key) or ("#" .. id))
 end
 
 ---------------------------------------------------------------------------
@@ -188,32 +198,18 @@ local function KeyFromLink(link)
 	if id then return "e" .. id end
 end
 
-local SECONDARY
-local function IsSecondary(name)
-	if not SECONDARY then
-		SECONDARY = {}
-		-- Cooking and First Aid; Fishing has no recipes.
-		for _, id in ipairs({ 2550, 3273 }) do
-			local n = GetSpellInfo(id)
-			if n then SECONDARY[n] = true end
-		end
-	end
-	return SECONDARY[name]
-end
-
--- Professions from the skill list: name -> { rank, max }, and whether the
--- list is complete (no collapsed headers). nil if the client has no skill list.
+-- Professions from GetProfessions: name -> { rank, max }, and whether the
+-- list is complete (always, with this API). nil if the client lacks it.
+-- Fishing is left out: it has no recipes.
+local FISHING = 356
 local function SkillProfessions()
-	if not GetNumSkillLines or not GetSkillLineInfo then return end
-	local profs, complete = {}, true
-	for i = 1, GetNumSkillLines() do
-		local name, isHeader, isExpanded, rank, _, _, max, abandonable = GetSkillLineInfo(i)
-		if isHeader and not isExpanded then complete = false end
-		if name and not isHeader and (abandonable or IsSecondary(name)) then
-			profs[name] = { rank = rank, max = max }
-		end
+	if not GetProfessions or not GetProfessionInfo then return end
+	local profs = {}
+	for _, index in pairs({ GetProfessions() }) do
+		local name, _, rank, max, _, _, skillLine = GetProfessionInfo(index)
+		if name and skillLine ~= FISHING then profs[name] = { rank = rank, max = max } end
 	end
-	return profs, complete
+	return profs, true
 end
 
 -- Bring char.profs in step with the skill list; true if anything changed.
@@ -279,50 +275,49 @@ local function Merge(prof, rank, max, found, cds)
 	end
 end
 
+-- The open profession window, through C_TradeSkillUI. Recipes that make an
+-- item are keyed by the item (so item tooltips can find crafters), others
+-- (enchants) by the recipe's spell. Someone else's linked profession, a
+-- guild profession view or an NPC's crafting is not ours and is skipped.
 local function ScanTradeSkill()
-	if not GetNumTradeSkills or not GetTradeSkillLine then return end
-	local prof, rank, max = GetTradeSkillLine()
+	local T = C_TradeSkillUI
+	if not T or not T.GetAllRecipeIDs or not T.GetBaseProfessionInfo then return end
+	if (T.IsTradeSkillLinked and T.IsTradeSkillLinked()) or (T.IsTradeSkillGuild and T.IsTradeSkillGuild())
+		or (T.IsNPCCrafting and T.IsNPCCrafting()) then
+		return
+	end
+	local base = T.GetBaseProfessionInfo()
+	if not base or not base.professionName then return end
 	local found, cds = {}, {}
-	for i = 1, GetNumTradeSkills() do
-		local name, kind = GetTradeSkillInfo(i)
-		if name and kind ~= "header" then
-			local key = KeyFromLink(GetTradeSkillItemLink and GetTradeSkillItemLink(i))
-				or KeyFromLink(GetTradeSkillRecipeLink and GetTradeSkillRecipeLink(i))
-			if key then
-				found[key] = name
-				local cd = GetTradeSkillCooldown and GetTradeSkillCooldown(i)
-				if cd and cd > 0 then cds[key] = time() + math.floor(cd) end
+	for _, recipeID in ipairs(T.GetAllRecipeIDs() or {}) do
+		local info = T.GetRecipeInfo(recipeID)
+		if info and info.learned then
+			local key
+			if T.GetRecipeOutputItemData then
+				local ok, out = pcall(T.GetRecipeOutputItemData, recipeID)
+				if ok and out and out.itemID then key = "i" .. out.itemID end
+			end
+			key = key or ("e" .. recipeID)
+			found[key] = info.name
+			if T.GetRecipeCooldown then
+				local ok, cd = pcall(T.GetRecipeCooldown, recipeID)
+				if ok and type(cd) == "number" and cd > 0 then cds[key] = time() + math.floor(cd) end
 			end
 		end
 	end
-	Merge(prof, rank, max, found, cds)
+	-- Rank comes from GetProfessions (SyncSkills); the window's own numbers
+	-- can be a sub-profession's.
+	Merge(base.professionName, nil, nil, found, cds)
 end
 
--- Enchanting uses the Craft window (so does Beast Training, which has no
--- skill line and is skipped).
-local function ScanCraft()
-	if not GetNumCrafts or not GetCraftDisplaySkillLine then return end
-	local prof, rank, max = GetCraftDisplaySkillLine()
-	if not prof then return end
-	local found = {}
-	for i = 1, GetNumCrafts() do
-		local name, _, kind = GetCraftInfo(i)
-		if name and kind ~= "header" then
-			local key = KeyFromLink(GetCraftItemLink and GetCraftItemLink(i))
-			if key then found[key] = name end
-		end
-	end
-	Merge(prof, rank, max, found, {})
-end
-
--- The windows fire many updates while opening; scan once they settle.
-local scanQueued = {}
-local function QueueScan(which)
-	if scanQueued[which] then return end
-	scanQueued[which] = true
+-- The window fires many updates while opening; scan once they settle.
+local scanQueued = false
+local function QueueScan()
+	if scanQueued then return end
+	scanQueued = true
 	C_Timer.After(0.5, function()
-		scanQueued[which] = false
-		if which == "trade" then ScanTradeSkill() else ScanCraft() end
+		scanQueued = false
+		ScanTradeSkill()
 	end)
 end
 
@@ -682,7 +677,7 @@ end
 local events = CreateFrame("Frame")
 for _, event in ipairs({
 	"ADDON_LOADED", "PLAYER_LOGIN", "CHAT_MSG_ADDON", "GUILD_ROSTER_UPDATE", "SKILL_LINES_CHANGED",
-	"TRADE_SKILL_SHOW", "TRADE_SKILL_UPDATE", "CRAFT_SHOW", "CRAFT_UPDATE", "GET_ITEM_INFO_RECEIVED",
+	"TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "NEW_RECIPE_LEARNED", "GET_ITEM_INFO_RECEIVED",
 }) do
 	-- Not every client has every event; an unknown one would raise an error.
 	pcall(events.RegisterEvent, events, event)
@@ -716,10 +711,8 @@ events:SetScript("OnEvent", function(_, event, ...)
 		OnRoster()
 	elseif event == "SKILL_LINES_CHANGED" then
 		if SyncSkills() then QueueHello() Changed() end
-	elseif event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_UPDATE" then
-		QueueScan("trade")
-	elseif event == "CRAFT_SHOW" or event == "CRAFT_UPDATE" then
-		QueueScan("craft")
+	elseif event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE" or event == "NEW_RECIPE_LEARNED" then
+		QueueScan()
 	elseif event == "GET_ITEM_INFO_RECEIVED" then
 		OnItemInfo(...)
 	end

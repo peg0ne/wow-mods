@@ -79,7 +79,7 @@ local function ShowTooltip(row)
 	if not item then return end
 	GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
 	if mode == "recept" then
-		local kind = item.key:sub(1, 1) == "i" and "item" or "enchant"
+		local kind = item.key:sub(1, 1) == "i" and "item" or "spell"
 		if not pcall(GameTooltip.SetHyperlink, GameTooltip, kind .. ":" .. item.key:sub(2)) then
 			GameTooltip:AddLine(RecipeName(item.key))
 		end

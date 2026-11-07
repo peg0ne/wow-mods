@@ -54,8 +54,10 @@ local function SlotInfo(bag, slot)
 	return link, count or 1, locked, quality, noValue
 end
 
+-- MERCHANT_SHOW and MERCHANT_CLOSED are what count: on Forever's client the
+-- MerchantFrame is not yet shown when MERCHANT_SHOW arrives.
 local function VendorOpen()
-	return merchantOpen and MerchantFrame and MerchantFrame:IsShown()
+	return merchantOpen
 end
 
 -- Every gray item with a sell price, as { bag, slot, link, value }.
@@ -126,9 +128,28 @@ local function OnMerchantShow()
 	if ticker then ticker:Cancel() ticker = nil end
 	queue = db.sell and FindJunk() or {}
 	sold = { items = 0, value = 0 }
-	if #queue == 0 then Finish() return end
-	ticker = C_Timer.NewTicker(INTERVAL, Tick)
-	Tick()
+	-- Give the vendor a moment to finish opening before selling or repairing.
+	C_Timer.After(0.3, function()
+		if not queue then return end
+		if #queue == 0 then Finish() return end
+		ticker = C_Timer.NewTicker(INTERVAL, Tick)
+		Tick()
+	end)
+end
+
+-- /avc test: what would be sold, without a vendor.
+local function Test()
+	local junk = FindJunk()
+	local total = 0
+	for _, item in ipairs(junk) do
+		total = total + item.value
+		Print(string.format("väska %d plats %d: %s, %s", item.bag, item.slot, item.link, Money(item.value)))
+	end
+	Print(string.format("skulle sälja %d saker för %s.", #junk, Money(total)))
+	if CanMerchantRepair then
+		local cost = GetRepairAllCost()
+		Print("lagning kostar " .. Money(cost or 0) .. " (syns bara hos en handlare som lagar).")
+	end
 end
 
 local function Status()
@@ -144,8 +165,11 @@ SlashCmdList.ATERVINNING = function(msg)
 		db.sell = not db.sell
 	elseif msg == "laga" then
 		db.repair = not db.repair
+	elseif msg == "test" then
+		Test()
+		return
 	elseif msg ~= "" then
-		Print("/avc visar inställningarna, /avc sälj slår på eller av försäljning, /avc laga slår på eller av lagning.")
+		Print("/avc visar inställningarna, /avc sälj slår på eller av försäljning, /avc laga slår på eller av lagning, /avc test visar vad som skulle säljas.")
 		return
 	end
 	Status()

@@ -280,10 +280,18 @@ local function Seen(guid, name, level)
 	end
 end
 
+-- The client may hand addons "secret" values that cannot be compared;
+-- treat those as unknown.
+local function Plain(v)
+	if v == nil or (issecretvalue and issecretvalue(v)) then return nil end
+	return v
+end
+
 local function CheckUnit(unit)
-	if not unit or not UnitExists(unit) or not UnitIsPlayer(unit) then return end
-	if UnitIsFriend and UnitIsFriend("player", unit) then return end
-	Seen(UnitGUID(unit), UnitName(unit), UnitLevel(unit))
+	if not unit or not UnitExists(unit) or not Plain(UnitIsPlayer(unit)) then return end
+	if UnitIsFriend and Plain(UnitIsFriend("player", unit)) then return end
+	local guid, name = Plain(UnitGUID(unit)), Plain(UnitName(unit))
+	if guid or name then Seen(guid, name, Plain(UnitLevel(unit))) end
 end
 
 local function OnSeen(sender, f)
@@ -303,8 +311,9 @@ end
 local function OnTooltipUnit(tooltip)
 	if not db or not tooltip.GetUnit then return end
 	local _, unit = tooltip:GetUnit()
-	if not unit or not UnitIsPlayer(unit) then return end
-	local s = ns.Suspect(UnitGUID(unit), UnitName(unit))
+	unit = Plain(unit)
+	if not unit or not Plain(UnitIsPlayer(unit)) then return end
+	local s = ns.Suspect(Plain(UnitGUID(unit)), Plain(UnitName(unit)))
 	if not s then return end
 	tooltip:AddLine(string.format("Polisen: %d anmälning%s", s.count, s.count == 1 and "" or "ar"), 1, 0.2, 0.2)
 	if s.last then

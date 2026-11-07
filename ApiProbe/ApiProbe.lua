@@ -134,6 +134,11 @@ local function Probe()
 	end
 	result.blocked = ApiProbeBlocked
 	result.time = time()
+	-- Keep snapshots taken earlier (profession window, death recap).
+	if ApiProbeDB then
+		result.tradeSkill = ApiProbeDB.tradeSkill
+		result.recapAfterDeath = ApiProbeDB.recapAfterDeath
+	end
 	ApiProbeDB = result
 	return result
 end
@@ -141,7 +146,38 @@ end
 local f = CreateFrame("Frame")
 f:RegisterEvent("PLAYER_LOGIN")
 f:RegisterEvent("PLAYER_DEAD")
-f:SetScript("OnEvent", function() C_Timer.After(5, Probe) end)
+f:SetScript("OnEvent", function(_, event)
+	C_Timer.After(5, function()
+		Probe()
+		if event ~= "PLAYER_DEAD" then return end
+		-- The recap of this death, field by field, marking secret values.
+		local s = {}
+		local ok, link = pcall(GetDeathRecapLink)
+		s.link = ok and (issecretvalue and issecretvalue(link) and "<secret>" or tostring(link)) or "error"
+		local plain = ok and not (issecretvalue and issecretvalue(link)) and type(link) == "string"
+		local id = plain and tonumber(link:match("death:(%d+)"))
+		s.id = id
+		if id and C_DeathRecap and C_DeathRecap.GetRecapEvents then
+			local ok2, events = pcall(C_DeathRecap.GetRecapEvents, id)
+			if ok2 and type(events) == "table" then
+				s.count = #events
+				s.events = {}
+				for i = 1, math.min(6, #events) do
+					local copy = {}
+					for k, v in pairs(events[i]) do
+						if issecretvalue and issecretvalue(v) then copy[k] = "<secret>"
+						elseif type(v) == "table" or type(v) == "function" then copy[k] = type(v)
+						else copy[k] = v end
+					end
+					s.events[i] = copy
+				end
+			else
+				s.error = tostring(events)
+			end
+		end
+		ApiProbeDB.recapAfterDeath = s
+	end)
+end)
 
 -- Opening a profession window: record what the modern API says about it.
 local tf = CreateFrame("Frame")

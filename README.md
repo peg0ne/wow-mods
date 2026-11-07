@@ -30,6 +30,16 @@ Conventions (matching the existing addons):
 - TOC `## Notes` are in English.
 - Once released, never rename the folder or SavedVariables names, or saved data is lost.
 
+## The Forever client (learned with ApiProbe, 2026-11-07)
+
+Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current retail engine. Write for the retail API:
+- **Missing:** the old globals `GetItemInfo`, `GetSpellInfo`, `GetSpellLink`, `GetContainerItemInfo`, `UseContainerItem`, all Classic trade skill and craft functions, `GetSkillLineInfo`, `CombatLogGetCurrentEventInfo`, `InviteUnit`, `GuildRoster`, `SendAddonMessage`. Use `C_Item`, `C_Spell`, `C_Container`, `C_TradeSkillUI`, `GetProfessions`/`GetProfessionInfo`, `C_PartyInfo`, `C_GuildInfo` and `C_ChatInfo` instead.
+- **Combat log is closed:** registering `COMBAT_LOG_EVENT_UNFILTERED` gets the addon blocked ("blocked from an action only available to the Blizzard UI"). Use `C_DeathRecap` (with `GetDeathRecapLink` for the latest ID) for what killed you.
+- **Hidden values:** `issecretvalue` exists. Some values can be hidden from addons and error when compared or printed; check them with `issecretvalue` first.
+- **Tooltips:** there's no `OnTooltipSetItem`/`OnTooltipSetUnit`; use `TooltipDataProcessor.AddTooltipPostCall`.
+- **Vendor timing:** `MerchantFrame` isn't shown yet when `MERCHANT_SHOW` fires.
+- `ApiProbe/` records which functions and events exist into `WTF/Account/<account>/SavedVariables/ApiProbe.lua` (`/probe`, then `/reload`).
+
 ## Built
 
 | Addon | Version | Status |

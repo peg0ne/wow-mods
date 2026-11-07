@@ -1,6 +1,7 @@
 -- Rättsmedicinalverket: death records for THÖNDERSTÖRM on WoW Forever.
--- Reads your own combat log, keeps the damage you took in the last 10 s,
--- and when you die works out what killed you. The record goes to the guild,
+-- When you die it reads the game's Death Recap (the combat log is closed
+-- to addons on Forever) and works out what killed you. Values the client
+-- marks secret are treated as unknown. The record goes to the guild,
 -- so every member with the addon gets the same record for every member's
 -- death. It shows nothing itself; other addons listen:
 --
@@ -19,7 +20,7 @@
 --                 "Fire", "Lava" or "Slime"
 --   blame, blameGUID, blameLevel, blameClass, blameRace
 --                 when the killer was not a hostile player but a hostile
---                 player hit you in the last 10 s: the one who did most
+--                 player is in the recap: the one who did most damage
 --   zone, subzone, map, x, y (0-1), time (the receiver's time())
 --
 -- Guild channel:
@@ -32,7 +33,6 @@ local _, ns = ...
 ns.GUILD = "THÖNDERSTÖRM"
 ns.VERSION = "0.1"
 ns.PREFIX = "RMV"
-local WINDOW = 10       -- seconds of damage kept
 local KEEP = 500        -- deaths kept in the saved log
 
 local API = {}
@@ -40,9 +40,15 @@ Rattsmedicinalverket = API
 
 local db
 local listeners = {}
-local recent = {}       -- damage taken: { t, guid, name, flags, ability, amount, env }
 local levels, levelCount = {}, 0
-local playerGUID
+local lastRecap         -- the recap ID already used, so an old recap is never reused
+
+-- The client may hand addons "secret" values that cannot be compared or
+-- printed; treat those as unknown.
+local function Plain(v)
+	if v == nil or (issecretvalue and issecretvalue(v)) then return nil end
+	return v
+end
 
 local band = bit.band
 local TYPE_PLAYER = COMBATLOG_OBJECT_TYPE_PLAYER or 0x400
@@ -100,64 +106,72 @@ end
 -- Levels are only known while a unit is in view, so note them as they pass.
 
 local function Note(unit)
-	local guid = UnitExists(unit) and UnitGUID(unit)
+	local guid = UnitExists(unit) and Plain(UnitGUID(unit))
 	if not guid then return end
 	if levelCount > 1000 then levels, levelCount = {}, 0 end
 	if not levels[guid] then levelCount = levelCount + 1 end
-	levels[guid] = UnitLevel(unit)
-end
-
-local function LookFor(guid)
-	if not guid or levels[guid] then return end
-	for _, unit in ipairs({ "target", "mouseover", "targettarget", "pettarget" }) do
-		if UnitGUID(unit) == guid then Note(unit) return end
-	end
-	if C_NamePlate and C_NamePlate.GetNamePlates then
-		for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
-			local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
-			if unit and UnitGUID(unit) == guid then Note(unit) return end
-		end
-	end
+	levels[guid] = Plain(UnitLevel(unit))
 end
 
 local function PlayerInfo(guid)
 	if not guid or not GetPlayerInfoByGUID then return end
 	local ok, _, class, _, race = pcall(GetPlayerInfoByGUID, guid)
-	if ok then return class, race end
+	if ok then return Plain(class), Plain(race) end
 end
 
 ---------------------------------------------------------------------------
--- Damage taken.
+-- The Death Recap: the last hits before death, as
+-- { t, guid, name, flags, ability, amount, env }.
 
-local function Prune()
-	local cutoff = GetTime() - WINDOW
-	while recent[1] and recent[1].t < cutoff do table.remove(recent, 1) end
+local function RecapID()
+	if not GetDeathRecapLink then return end
+	local ok, link = pcall(GetDeathRecapLink)
+	link = ok and Plain(link)
+	local id = type(link) == "string" and link:match("death:(%d+)")
+	return id and tonumber(id)
 end
 
-local function OnCombatLog()
-	local _, sub, _, srcGUID, srcName, srcFlags, _, dstGUID, _, _, _, a1, a2, a3, a4 = CombatLogGetCurrentEventInfo()
-	if dstGUID ~= playerGUID then return end
-	local entry
-	if sub == "SWING_DAMAGE" then
-		entry = { ability = "", amount = a1 }
-	elseif sub == "ENVIRONMENTAL_DAMAGE" then
-		entry = { env = a1, amount = a2 }
-	elseif sub == "RANGE_DAMAGE" or sub == "SPELL_DAMAGE" or sub == "SPELL_PERIODIC_DAMAGE"
-		or sub == "DAMAGE_SHIELD" or sub == "DAMAGE_SPLIT" then
-		entry = { ability = a2 or "", amount = a4 }
-	else
-		return
+local function RecapEvents()
+	local id = RecapID()
+	if not id or id == lastRecap then return end
+	local get = (C_DeathRecap and C_DeathRecap.GetRecapEvents) or DeathRecap_GetEvents
+	if not get then return end
+	local ok, events = pcall(get, id)
+	if not ok or type(events) ~= "table" or #events == 0 then return end
+	lastRecap = id
+	local list = {}
+	for _, e in ipairs(events) do
+		local amount = Plain(e.amount)
+		if type(amount) == "number" then
+			table.insert(list, {
+				t = Plain(e.timestamp) or 0, guid = Plain(e.sourceGUID), name = Plain(e.sourceName),
+				flags = Plain(e.sourceFlags), ability = Plain(e.spellName) or "", amount = amount,
+				env = Plain(e.environmentalType),
+			})
+		end
 	end
-	entry.t, entry.guid, entry.name, entry.flags = GetTime(), srcGUID, srcName, srcFlags or 0
-	table.insert(recent, entry)
-	Prune()
-	if srcGUID and srcGUID ~= "" then LookFor(srcGUID) end
+	return list
 end
 
-local function Kind(flags)
-	if band(flags, TYPE_PLAYER) > 0 then return "player" end
-	if band(flags, TYPE_PET) > 0 or band(flags, TYPE_GUARDIAN) > 0 then return "pet" end
-	return "npc"
+-- What kind of thing a source is: from its flags, else from its GUID.
+local function Kind(e)
+	if e.flags then
+		if band(e.flags, TYPE_PLAYER) > 0 then return "player" end
+		if band(e.flags, TYPE_PET) > 0 or band(e.flags, TYPE_GUARDIAN) > 0 then return "pet" end
+		return "npc"
+	end
+	local prefix = e.guid and e.guid:match("^(%a+)%-")
+	if prefix == "Player" then return "player" end
+	if prefix == "Pet" then return "pet" end
+	if prefix then return "npc" end
+	return "unknown"
+end
+
+-- Hostile from the flags; without flags, any other player in the recap
+-- (duels end before death, and group members do not hit you).
+local function Hostile(e)
+	if e.flags then return band(e.flags, HOSTILE) > 0 end
+	return Kind(e) == "player" or Kind(e) == "npc"
 end
 
 local function Position()
@@ -208,8 +222,44 @@ local function Broadcast(r)
 	end
 end
 
+-- Fill in the killer from the recap's hits.
+local function Examine(r, hits)
+	local last
+	for _, e in ipairs(hits) do
+		if not last or e.t >= last.t then last = e end
+	end
+	if not last then return end
+	r.amount = last.amount
+	if last.env then
+		r.kind, r.env = "environment", last.env
+	else
+		r.kind = Kind(last)
+		r.killer, r.killerGUID, r.ability = last.name, last.guid, last.ability
+		r.hostile = Hostile(last)
+		r.killerLevel = last.guid and levels[last.guid]
+		if r.kind == "player" then r.killerClass, r.killerRace = PlayerInfo(last.guid) end
+	end
+	-- Someone else landed the blow (a pet, a guard, the fall): blame the
+	-- hostile player who did the most damage in the recap, if any.
+	if r.kind == "player" and r.hostile then return end
+	local dealt, names = {}, {}
+	for _, e in ipairs(hits) do
+		if e.guid and Kind(e) == "player" and Hostile(e) then
+			dealt[e.guid] = (dealt[e.guid] or 0) + e.amount
+			names[e.guid] = e.name
+		end
+	end
+	local best
+	for guid, amount in pairs(dealt) do
+		if not best or amount > dealt[best] then best = guid end
+	end
+	if best then
+		r.blame, r.blameGUID, r.blameLevel = names[best], best, levels[best]
+		r.blameClass, r.blameRace = PlayerInfo(best)
+	end
+end
+
 local function OnDeath()
-	Prune()
 	local stamp = time()
 	local victim = Me() or UnitName("player")
 	local map, x, y = Position()
@@ -219,41 +269,20 @@ local function OnDeath()
 		zone = GetRealZoneText and GetRealZoneText() or GetZoneText(), subzone = GetSubZoneText(),
 		map = map, x = x, y = y, kind = "unknown",
 	}
-	local last = recent[#recent]
-	if last and GetTime() - last.t <= 5 then
-		r.amount = last.amount
-		if last.env then
-			r.kind, r.env = "environment", last.env
-		else
-			r.kind = Kind(last.flags)
-			r.killer, r.killerGUID, r.ability = last.name, last.guid, last.ability
-			r.hostile = band(last.flags, HOSTILE) > 0
-			r.killerLevel = levels[last.guid]
-			if r.kind == "player" then r.killerClass, r.killerRace = PlayerInfo(last.guid) end
+	-- The recap may take a moment to fill; try for a few seconds.
+	local tries = 0
+	local function Try()
+		tries = tries + 1
+		local hits = RecapEvents()
+		if not hits and tries < 4 then
+			C_Timer.After(1, Try)
+			return
 		end
+		if hits then Examine(r, hits) end
+		Store(r)
+		Broadcast(r)
 	end
-	-- Someone else landed the blow (a pet, a guard, the fall): blame the
-	-- hostile player who did the most damage in the window, if any.
-	if not (r.kind == "player" and r.hostile) then
-		local dealt, names = {}, {}
-		for _, e in ipairs(recent) do
-			if e.guid and band(e.flags, TYPE_PLAYER) > 0 and band(e.flags, HOSTILE) > 0 then
-				dealt[e.guid] = (dealt[e.guid] or 0) + (e.amount or 0)
-				names[e.guid] = e.name
-			end
-		end
-		local best
-		for guid, amount in pairs(dealt) do
-			if not best or amount > dealt[best] then best = guid end
-		end
-		if best then
-			r.blame, r.blameGUID, r.blameLevel = names[best], best, levels[best]
-			r.blameClass, r.blameRace = PlayerInfo(best)
-		end
-	end
-	recent = {}
-	Store(r)
-	Broadcast(r)
+	C_Timer.After(0.5, Try)
 end
 
 local function OnAddonMessage(prefix, msg, channel, sender)
@@ -277,9 +306,8 @@ local function OnAddonMessage(prefix, msg, channel, sender)
 end
 
 local events = CreateFrame("Frame")
--- The combat log is closed to addons on Forever (registering for it gets the
--- addon blocked), so for now deaths are recorded without a killer.
--- TODO: read the killer from the Death Recap if the client allows it.
+-- Never COMBAT_LOG_EVENT_UNFILTERED: on Forever, registering for it gets the
+-- addon blocked.
 for _, event in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "CHAT_MSG_ADDON", "PLAYER_DEAD",
 	"PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "NAME_PLATE_UNIT_ADDED" }) do
 	pcall(events.RegisterEvent, events, event)
@@ -295,11 +323,10 @@ events:SetScript("OnEvent", function(_, event, ...)
 	elseif not db then
 		return
 	elseif event == "PLAYER_LOGIN" then
-		playerGUID = UnitGUID("player")
+		-- A recap left over from before this session must not be read as new.
+		lastRecap = RecapID()
 		local register = C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix or RegisterAddonMessagePrefix
 		if register then register(ns.PREFIX) end
-	elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
-		OnCombatLog()
 	elseif event == "PLAYER_DEAD" then
 		OnDeath()
 	elseif event == "CHAT_MSG_ADDON" then
