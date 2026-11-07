@@ -4,6 +4,9 @@
 -- update while you play. It never writes to them and sends no messages;
 -- the buttons run the addons' own slash commands.
 --
+-- The Addons window (/gpanel addons) opens the windows of the repo's other
+-- addons and turns their automatic settings on and off.
+--
 -- The panel shows as a compact bar and opens to the full panel while the
 -- mouse is over it (/gpanel kompakt turns that off). Your own tax is read
 -- twice a second; the guild figures are worked out again only when the
@@ -156,10 +159,10 @@ local function SetColor(tex, r, g, b, a)
 	if tex.SetColorTexture then tex:SetColorTexture(r, g, b, a or 1) else tex:SetTexture(r, g, b, a or 1) end
 end
 
-local function RunSlash(key, msg)
+local function RunSlash(key, msg, title)
 	local fn = SlashCmdList and SlashCmdList[key]
 	if fn then fn(msg or "") return true end
-	Print(key == "SWEDBANK" and "Swedbank är inte på." or "Skatteverket är inte på.")
+	Print((title or (key == "SWEDBANK" and "Swedbank" or "Skatteverket")) .. " är inte på.")
 end
 
 -- The guild figures, worked out only when something has changed.
@@ -303,7 +306,7 @@ local function DefaultPosition()
 	frame:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -40, -220)
 end
 
-local Refresh, ClosePanel
+local Refresh, ClosePanel, ToggleHub
 
 local function Build()
 	frame = CreateFrame("Frame", "GildepanelFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
@@ -357,6 +360,9 @@ local function Build()
 	local close = CreateFrame("Button", nil, body, "UIPanelCloseButton")
 	close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2, -2)
 	close:SetScript("OnClick", function() ClosePanel() end)
+	local addons = Button(body, "Addons", 64, function() ToggleHub() end)
+	addons:SetHeight(20)
+	addons:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -30, -8)
 
 	-- Skatteverket
 	Section(body, "Skatteverket", -34)
@@ -598,7 +604,7 @@ local function BuildMini()
 	mini:SetSize(31, 31)
 	mini:SetFrameStrata("MEDIUM")
 	mini:SetFrameLevel(8)
-	mini:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	mini:RegisterForClicks("LeftButtonUp", "RightButtonUp", "MiddleButtonUp")
 	mini:RegisterForDrag("LeftButton")
 	mini:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
 	local icon = mini:CreateTexture(nil, "BACKGROUND")
@@ -615,7 +621,13 @@ local function BuildMini()
 	mini.dot:SetPoint("BOTTOMRIGHT", -6, 6)
 
 	mini:SetScript("OnClick", function(_, button)
-		if button == "RightButton" then RunSlash("SKATTEVERKET", "") else Toggle() end
+		if button == "MiddleButton" or (button == "LeftButton" and IsShiftKeyDown()) then
+			ToggleHub()
+		elseif button == "RightButton" then
+			RunSlash("SKATTEVERKET", "")
+		else
+			Toggle()
+		end
 	end)
 	mini:SetScript("OnDragStart", function(self)
 		self:SetScript("OnUpdate", function()
@@ -639,13 +651,216 @@ local function BuildMini()
 			if s.next then GameTooltip:AddDoubleLine("Nästa steg ned om", Duration(s.next), 1, 1, 1, 1, 0.82, 0) end
 		end
 		GameTooltip:AddLine(" ")
-		GameTooltip:AddLine("Vänsterklick: panelen   Högerklick: /skatt   Dra: flytta", 0.6, 0.6, 0.6)
+		GameTooltip:AddLine("Vänsterklick: panelen   Högerklick: /skatt", 0.6, 0.6, 0.6)
+		GameTooltip:AddLine("Shift-klick eller mittenklick: addons   Dra: flytta", 0.6, 0.6, 0.6)
 		GameTooltip:Show()
 	end)
 	mini:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	PlaceMini()
 	if db.hideMinimap then mini:Hide() end
 	RefreshMini()
+end
+
+------------------------------------------------------------------------
+-- Addons: one window that opens the other guild addons' windows and turns
+-- their automatic settings on and off. The settings are written straight
+-- into each addon's saved table, which is the same table the addon reads,
+-- so a change takes effect at once. Settings with side effects (Eniro's
+-- position sharing, the compact panel) go through the addon's own slash
+-- command instead.
+
+local hub
+
+local WINDOWS = {
+	{ "Arbetsformedlingen", "Uppdrag", "ARBETSFORMEDLINGEN" },
+	{ "Arbetsformedlingen", "Platsbanken", "PLATSBANKEN" },
+	{ "Skolverket", "Skolverket", "SKOLVERKET" },
+	{ "Eniro", "Eniro", "ENIRO" },
+	{ "Polisen", "Polisen", "POLISEN" },
+	{ "SCB", "SCB", "SCB" },
+	{ "Skatteverket", "Skatteverket", "SKATTEVERKET" },
+	{ "Swedbank", "Swedbank", "SWEDBANK" },
+	{ "Dodsannonser", "Dödsannonser", "DODSANNONSER" },
+}
+
+-- invert: the addon stores "quiet", the box shows the opposite.
+-- default: the value when the addon has not saved one yet.
+local SETTINGS = {
+	{ addon = "Atervinningscentralen", title = "Återvinningscentralen", db = "AtervinningscentralenDB", items = {
+		{ key = "sell", label = "Sälj grått hos handlare", default = true },
+		{ key = "repair", label = "Laga utrustningen", default = true },
+	} },
+	{ addon = "Handlaggaren", title = "Handläggaren", db = "HandlaggarenDB", items = {
+		{ key = "on", label = "Ta och lämna in uppdrag", default = true },
+		{ key = "pickBest", label = "Välj dyraste belöningen själv" },
+		{ key = "share", label = "Dela nya uppdrag med gruppen" },
+		{ key = "gossip", label = "Välj NPC:ns enda pratval" },
+		{ key = "trivial", label = "Ta gråa uppdrag" },
+	} },
+	{ addon = "Dodsannonser", title = "Dödsannonser", db = "DodsannonserDB", items = {
+		{ key = "quiet", label = "Visa nya i chatten", invert = true },
+		{ key = "guildChat", label = "Skriv min egen i gillechatten" },
+	} },
+	{ addon = "Polisen", title = "Polisen", db = "PolisenDB", items = {
+		{ key = "alarm", label = "Varning på skärmen och ljud", default = true },
+		{ key = "quiet", label = "Visa andras observationer", invert = true },
+	} },
+	{ addon = "Arbetsformedlingen", title = "Arbetsförmedlingen", db = "ArbetsformedlingenCharDB", items = {
+		{ key = "quiet", label = "Visa nya annonser i chatten", invert = true },
+	} },
+	{ addon = "Eniro", title = "Eniro", db = "EniroCharDB", items = {
+		{ key = "share", label = "Dela min position med gillet", slash = { "ENIRO", "dela" } },
+	} },
+	{ addon = ADDON, title = "Gildepanel", db = "GildepanelDB", items = {
+		{ key = "warn", label = "Förvarna innan ställningen sjunker", default = true },
+		{ key = "compact", label = "Kompakt rad tills musen är över", default = true, slash = { "GILDEPANEL", "kompakt" } },
+		{ key = "hideMinimap", label = "Visa minimapknappen", invert = true, slash = { "GILDEPANEL", "minimap" } },
+	} },
+}
+
+local function Loaded(name)
+	if C_AddOns and C_AddOns.IsAddOnLoaded then return C_AddOns.IsAddOnLoaded(name) end
+	return IsAddOnLoaded and IsAddOnLoaded(name)
+end
+
+local function SettingValue(group, item)
+	local t = _G[group.db]
+	if type(t) ~= "table" then return false end
+	local v = t[item.key]
+	if v == nil then v = item.default or false end
+	v = v and true or false
+	if item.invert then v = not v end
+	return v
+end
+
+local function SetSetting(group, item, on)
+	if item.slash then
+		-- The command toggles; run it only if the value is not already right.
+		if SettingValue(group, item) ~= on then RunSlash(item.slash[1], item.slash[2], group.title) end
+		return
+	end
+	local t = _G[group.db]
+	if type(t) ~= "table" then return end
+	if item.invert then on = not on end
+	t[item.key] = on
+end
+
+local function RefreshHub()
+	for _, b in ipairs(hub.windows) do
+		if Loaded(b.addon) and SlashCmdList[b.key] then b:Enable() else b:Disable() end
+	end
+	for _, row in ipairs(hub.groups) do
+		local loaded = Loaded(row.group.addon) and type(_G[row.group.db]) == "table"
+		row.header:SetText(row.group.title .. (loaded and "" or "  |cff808080(inte på)|r"))
+		for _, cb in ipairs(row.boxes) do
+			cb:SetChecked(loaded and SettingValue(row.group, cb.item))
+			if loaded then
+				cb:Enable()
+				cb.label:SetTextColor(1, 1, 1)
+			else
+				cb:Disable()
+				cb.label:SetTextColor(0.5, 0.5, 0.5)
+			end
+		end
+	end
+end
+
+local function BuildHub()
+	local HW = 320
+	hub = CreateFrame("Frame", "GildepanelHub", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+	hub:SetWidth(HW)
+	hub:SetFrameStrata("DIALOG")
+	hub:SetClampedToScreen(true)
+	hub:SetBackdrop({
+		bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+		tile = true, tileSize = 16, edgeSize = 16,
+		insets = { left = 4, right = 4, top = 4, bottom = 4 },
+	})
+	hub:SetBackdropColor(0.05, 0.05, 0.08, 0.95)
+	hub:SetBackdropBorderColor(0.6, 0.5, 0.2, 1)
+	hub:SetMovable(true)
+	hub:EnableMouse(true)
+	hub:RegisterForDrag("LeftButton")
+	hub:SetScript("OnDragStart", function(self) self:StartMoving() end)
+	hub:SetScript("OnDragStop", function(self)
+		self:StopMovingOrSizing()
+		local left, top = self:GetLeft(), self:GetTop()
+		if left and top then
+			db.hubPos = { left, top }
+			self:ClearAllPoints()
+			self:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+		end
+	end)
+	if db.hubPos then
+		hub:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", db.hubPos[1], db.hubPos[2])
+	else
+		hub:SetPoint("CENTER")
+	end
+	-- Unlike the panel, Escape closes this one.
+	table.insert(UISpecialFrames, "GildepanelHub")
+
+	Text(hub, "GameFontNormalLarge", "TOPLEFT", PAD, -12):SetText("Addons")
+	local close = CreateFrame("Button", nil, hub, "UIPanelCloseButton")
+	close:SetPoint("TOPRIGHT", -2, -2)
+
+	-- Windows, two buttons a row.
+	Section(hub, "Fönster", -34)
+	hub.windows = {}
+	local bw = (HW - 2 * PAD - 8) / 2
+	local y = -58
+	for i, w in ipairs(WINDOWS) do
+		local b = Button(hub, w[2], bw, function() RunSlash(w[3], "", w[2]) end)
+		b.addon, b.key = w[1], w[3]
+		local col = (i - 1) % 2
+		b:SetPoint("TOPLEFT", PAD + col * (bw + 8), y)
+		if col == 1 or i == #WINDOWS then y = y - 26 end
+		table.insert(hub.windows, b)
+	end
+
+	-- Automatic settings, grouped by addon.
+	y = y - 10
+	Section(hub, "Automatik", y)
+	y = y - 24
+	hub.groups = {}
+	for _, group in ipairs(SETTINGS) do
+		local row = { group = group, boxes = {} }
+		row.header = Text(hub, "GameFontNormalSmall", "TOPLEFT", PAD, y)
+		y = y - 16
+		for _, item in ipairs(group.items) do
+			local cb = CreateFrame("CheckButton", nil, hub, "UICheckButtonTemplate")
+			cb:SetSize(22, 22)
+			cb:SetPoint("TOPLEFT", PAD + 4, y + 3)
+			cb.item = item
+			cb.label = Text(hub, "GameFontHighlightSmall", "LEFT", cb, "RIGHT", 2, 1)
+			cb.label:SetText(item.label)
+			cb:SetScript("OnClick", function(self)
+				SetSetting(group, item, self:GetChecked() and true or false)
+				RefreshHub()
+			end)
+			table.insert(row.boxes, cb)
+			y = y - 20
+		end
+		y = y - 6
+		table.insert(hub.groups, row)
+	end
+	hub:SetHeight(-y + 8)
+
+	-- Slash commands can change a setting while the window is open.
+	hub:SetScript("OnShow", RefreshHub)
+	hub:SetScript("OnUpdate", function(self, elapsed)
+		self.elapsed = (self.elapsed or 0) + elapsed
+		if self.elapsed >= 1 then
+			self.elapsed = 0
+			RefreshHub()
+		end
+	end)
+	hub:Hide()
+end
+
+ToggleHub = function()
+	if not hub then BuildHub() end
+	SetVisible(hub, not hub:IsShown())
 end
 
 ------------------------------------------------------------------------
@@ -746,10 +961,12 @@ SlashCmdList.GILDEPANEL = function(msg)
 			if frame:IsShown() then SavePosition() end
 		end
 		Print("panelen är tillbaka på sin plats.")
+	elseif cmd == "addons" or cmd == "mods" then
+		ToggleHub()
 	elseif cmd == "varning" or cmd == "warn" then
 		db.warn = db.warn == false
 		Print(db.warn and "varnar 6 timmar innan ställningen sjunker." or "inga förvarningar.")
 	else
-		Print("/gpanel visar panelen. /gpanel kompakt, /gpanel lås, /gpanel minimap, /gpanel skala 0.9, /gpanel återställ, /gpanel varning.")
+		Print("/gpanel visar panelen. /gpanel addons, /gpanel kompakt, /gpanel lås, /gpanel minimap, /gpanel skala 0.9, /gpanel återställ, /gpanel varning.")
 	end
 end

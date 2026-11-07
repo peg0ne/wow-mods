@@ -10,7 +10,7 @@ Guild addons are named after Swedish public institutions and companies.
 | Arbetsformedlingen | Shared quests (`/uppdrag`) and the Platsbanken group-finder board (`/platsbanken`) |
 | Skatteverket | Guild tax on looted gold, vendor and auction sales; standings in `/skatt` |
 | Swedbank | Guild loans; only the guild leader sees applications |
-| Gildepanel | Minimap button and panel that reads the Skatteverket and Swedbank data (sends nothing) |
+| Gildepanel | Minimap button and panel that reads the Skatteverket and Swedbank data (sends nothing); its Addons window (`/gpanel addons`, Shift- or middle-click the minimap button) opens the other addons' windows and toggles their automatic settings |
 | QuestLogSort | Puts completed quests last in the quest log and tracker; sorts the tracker by level |
 
 Guild addons share data through `C_ChatInfo.SendAddonMessage` on the GUILD channel and store it in SavedVariables.
