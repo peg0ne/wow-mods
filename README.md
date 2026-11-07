@@ -14,7 +14,8 @@ Guild addons are named after Swedish public institutions and companies.
 | QuestLogSort | Puts completed quests last in the quest log and tracker; sorts the tracker by level |
 
 Guild addons share data through `C_ChatInfo.SendAddonMessage` on the GUILD channel and store it in SavedVariables.
-The five addons above aren't in this repo. They live only in the AddOns folder.
+Arbetsformedlingen, Gildepanel and QuestLogSort are the user's own and live in this repo (moved here unchanged on 2026-11-07).
+Skatteverket and Swedbank belong to someone else: they stay in the AddOns folder, and this repo only reads their behavior (for example, Skatteverket taxes vendor sales).
 
 ## This repo
 
@@ -33,14 +34,19 @@ Conventions (matching the existing addons):
 
 | Addon | Version | Status |
 |---|---|---|
-| Atervinningscentralen | 0.1 | Built, not yet tested in game |
+| Atervinningscentralen | 0.1 | Built; loads in game (`/avc` works), vendor run not yet tested |
+| Skolverket | 0.1 | Built, not yet tested in game |
 
 ## Accepted ideas
 
-### Skolverket: guild crafting directory
-- Saves each member's recipes when they open a profession window (`GetNumTradeSkills` / `GetTradeSkillInfo`). Enchanting uses the Craft API (`GetNumCrafts` / `GetCraftInfo`), so it needs separate handling.
-- Re-scans when a recipe is learned and syncs the lists to the guild with addon messages.
-- `/skola <search>` shows who can craft an item, whether they're online, and their profession cooldowns (`GetTradeSkillCooldown`), for example transmutes and Mooncloth.
+### Skolverket: guild crafting directory (built, v0.1)
+- Opening a profession window saves its recipes, only ever adding (recipes are never unlearned, so collapsed headers and filters lose nothing). Enchanting is read through the Craft API.
+- Professions and ranks come from the skill list, so they show before the window has been opened. A profession that disappears from the skill list (unlearned) is dropped, but only if no skill headers are collapsed.
+- Sync (prefix `SKOLA`, protocol documented at the top of `Core.lua`): members announce each profession's rank and the time it last changed. Anyone with older data asks for it, and everyone who's online hears the answer. All data is kept between sessions, so offline crafters can be found.
+- Outgoing messages are queued: a burst of 8, then 1 per second, because the server drops addon messages sent too fast.
+- `/skola [search]` opens a window with three views: Recept (search, Shift-click to link, "Fråga" whispers the best online crafter), Cooldowns (shared cooldowns such as transmutes grouped), and Medlemmar (everyone's professions and when they were last seen).
+- Item tooltips get a line: "Skolverket: Pelle, Kalle" (green online, grey offline).
+- Limitations for now: a member's data spreads only while that member is online (nobody passes on someone else's data). Cooldowns only update when the owner opens the profession window.
 
 ### Eniro: where guild members are
 - Basic version: zone and level come from the guild roster (`GetGuildRosterInfo`), so it sends no data.
