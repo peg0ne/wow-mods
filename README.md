@@ -45,8 +45,8 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Addon | Version | Status |
 |---|---|---|
 | Atervinningscentralen | 0.1 | Works in game (sells grays, repairs) |
-| Skolverket | 0.1 | Works in game for your own recipes; guild sync not yet tested (needs a second member) |
-| Eniro | 0.1 | Built, not yet tested in game |
+| Skolverket | 0.1 | Works in game for your own recipes and the item tooltip; guild sync not yet tested (needs a second member) |
+| Eniro | 0.1 | Works in game (member list); position sharing not yet tested (needs a second member) |
 | Rattsmedicinalverket | 0.1 | Built, not yet tested in game |
 | Polisen | 0.1 | Built, not yet tested in game |
 
