@@ -51,6 +51,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Polisen | 0.1 | Loads without errors; reports need a death to a hostile player |
 | Dodsannonser | 0.1 | Built, not yet tested in game |
 | Handlaggaren | 0.1 | Built, not yet tested in game |
+| SCB | 0.1 | Built, not yet tested in game |
 
 ## Accepted ideas
 
@@ -122,10 +123,11 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 - This client has no achievements. Events trigger them: `PLAYER_LEVEL_UP`, looting an epic, profession reaching 300, `UPDATE_FACTION` (exalted), first mount, boss kills (`UNIT_DIED` in the combat log), a run without dying.
 - Announces unlocks in guild chat, has a panel, and shares a guild leaderboard through addon messages.
 
-### SCB: guild statistics (social)
-- Totals per member and for the whole guild: kills, deaths (and their cause), gold earned, quests completed, time played (`TIME_PLAYED_MSG`).
-- Fun facts, for example "THÖNDERSTÖRM has died 1,412 times; 38% of those were falling".
-- Can reuse the gold counting from Skatteverket and the death detection from Polisen and Dödsannonser.
+### SCB: guild statistics (built, v0.1)
+- Each character counts its own deaths by cause (through Rättsmedicinalverket, if it's on), kills that gave experience (the first-person XP chat line, matched from `COMBATLOG_XPGAIN_FIRSTPERSON` so it works in any language), quests handed in (`QUEST_TURNED_IN`), gold in and out (`PLAYER_MONEY` deltas), and time played (from `TIME_PLAYED_MSG` when the player types /played, plus time logged in).
+- Shares the totals on the guild channel (prefix `SCB`) at login, on level-up, on request, and every 10 minutes if they changed. Everyone keeps everyone's latest figures.
+- `/scb` window: one row per member, sortable by clicking a column header, a guild total row, and generated fun facts ("THÖNDERSTÖRM har dött 52 gånger; 12% av dem var fall …").
+- Limitation: counting starts when the addon is installed; there is no history before that.
 
 ### Dödsannonser: obituaries (built, v0.1)
 - Requires Rättsmedicinalverket. Every member with the addon writes the obituary in their own chat from the death record they already received, so nothing extra is sent and nothing can be blocked.
