@@ -176,7 +176,9 @@ local function OnDeath(r)
 	if r.me and db.guildChat and IsInGuild() then
 		local line = "Dödsannons: " .. text
 		if #line > 255 then line = line:sub(1, 252) .. "..." end
-		SendChatMessage(line, "GUILD")
+		-- Newer clients moved it into C_ChatInfo.
+		local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
+		if send then send(line, "GUILD") end
 	end
 end
 

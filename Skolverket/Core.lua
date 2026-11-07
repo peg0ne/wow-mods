@@ -640,7 +640,10 @@ end
 -- Item tooltips: who in the guild can craft this.
 
 local function AddCrafterLine(tooltip, link)
-	if not db or not link or not ns.InOurGuild() then return end
+	-- The client may hide values from addons (in combat, for instance);
+	-- a hidden link cannot be read, so add nothing.
+	if issecretvalue and issecretvalue(link) then return end
+	if not db or type(link) ~= "string" or not ns.InOurGuild() then return end
 	local key = KeyFromLink(link)
 	if not key then return end
 	local crafters = ns.Crafters(key)

@@ -17,7 +17,8 @@
 --   hostile       the killer was hostile
 --   ability, amount     the killing blow ("" ability = melee)
 --   env           environment damage: "Falling", "Drowning", "Fatigue",
---                 "Fire", "Lava" or "Slime"
+--                 "Fire", "Lava", "Slime", or "Unknown" when the recap
+--                 does not say which
 --   blame, blameGUID, blameLevel, blameClass, blameRace
 --                 when the killer was not a hostile player but a hostile
 --                 player is in the recap: the one who did most damage
@@ -143,10 +144,14 @@ local function RecapEvents()
 	for _, e in ipairs(events) do
 		local amount = Plain(e.amount)
 		if type(amount) == "number" then
+			-- Falling, drowning and lava are ENVIRONMENTAL_DAMAGE; the type may
+			-- or may not be named, so mark them by the event either way.
+			local env = Plain(e.environmentalType)
+			if not env and Plain(e.event) == "ENVIRONMENTAL_DAMAGE" then env = "Unknown" end
 			table.insert(list, {
 				t = Plain(e.timestamp) or 0, guid = Plain(e.sourceGUID), name = Plain(e.sourceName),
 				flags = Plain(e.sourceFlags), ability = Plain(e.spellName) or "", amount = amount,
-				env = Plain(e.environmentalType),
+				env = env,
 			})
 		end
 	end

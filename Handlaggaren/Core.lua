@@ -41,6 +41,17 @@ local function Active()
 	return db and db.on and not skipping
 end
 
+-- Quests already tried in the last half minute. A quest that cannot be
+-- accepted (full log) or handed in (needs gold) would otherwise reopen
+-- every time you talk to the NPC and hide the rest of the conversation.
+local tried = {}
+local function FirstTry(questID)
+	if not questID then return true end
+	if GetTime() - (tried[questID] or -999) < 30 then return false end
+	tried[questID] = GetTime()
+	return true
+end
+
 ---------------------------------------------------------------------------
 -- Gossip windows (most NPCs).
 
@@ -49,13 +60,13 @@ local function OnGossip()
 	if not Active() or not C_GossipInfo then return end
 	-- Finished quests first.
 	for _, q in ipairs(C_GossipInfo.GetActiveQuests and C_GossipInfo.GetActiveQuests() or {}) do
-		if q.isComplete and q.questID then
+		if q.isComplete and q.questID and FirstTry(q.questID) then
 			C_GossipInfo.SelectActiveQuest(q.questID)
 			return
 		end
 	end
 	for _, q in ipairs(C_GossipInfo.GetAvailableQuests and C_GossipInfo.GetAvailableQuests() or {}) do
-		if q.questID and not q.isIgnored and (db.trivial or not q.isTrivial) then
+		if q.questID and not q.isIgnored and (db.trivial or not q.isTrivial) and FirstTry(q.questID) then
 			C_GossipInfo.SelectAvailableQuest(q.questID)
 			return
 		end
@@ -74,16 +85,18 @@ end
 local function OnGreeting()
 	skipping = IsShiftKeyDown()
 	if not Active() then return end
+	-- This window gives titles, not quest IDs; the title stands in for the ID.
 	for i = 1, (GetNumActiveQuests and GetNumActiveQuests() or 0) do
-		local _, isComplete = GetActiveTitle(i)
-		if isComplete then
+		local title, isComplete = GetActiveTitle(i)
+		if isComplete and FirstTry("a:" .. tostring(title)) then
 			SelectActiveQuest(i)
 			return
 		end
 	end
 	for i = 1, (GetNumAvailableQuests and GetNumAvailableQuests() or 0) do
 		local isTrivial = GetAvailableQuestInfo and select(1, GetAvailableQuestInfo(i))
-		if db.trivial or not isTrivial then
+		local title = GetAvailableTitle and GetAvailableTitle(i)
+		if (db.trivial or not isTrivial) and FirstTry("n:" .. tostring(title or i)) then
 			SelectAvailableQuest(i)
 			return
 		end

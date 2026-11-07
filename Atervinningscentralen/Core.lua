@@ -109,6 +109,10 @@ local function Finish()
 end
 
 local function Tick()
+	if not queue then
+		if ticker then ticker:Cancel() ticker = nil end
+		return
+	end
 	for _ = 1, BATCH do
 		if not VendorOpen() then Finish() return end
 		local item = table.remove(queue)
@@ -123,14 +127,19 @@ local function Tick()
 	end
 end
 
+local visit = 0   -- counts vendor openings, so a late timer from an earlier one does nothing
+
 local function OnMerchantShow()
-	if IsShiftKeyDown() then return end
+	visit = visit + 1
+	local thisVisit = visit
 	if ticker then ticker:Cancel() ticker = nil end
+	queue, sold = nil, nil
+	if IsShiftKeyDown() then return end
 	queue = db.sell and FindJunk() or {}
 	sold = { items = 0, value = 0 }
 	-- Give the vendor a moment to finish opening before selling or repairing.
 	C_Timer.After(0.3, function()
-		if not queue then return end
+		if thisVisit ~= visit or not queue then return end
 		if #queue == 0 then Finish() return end
 		ticker = C_Timer.NewTicker(INTERVAL, Tick)
 		Tick()
