@@ -3,8 +3,8 @@
 -- hostile player did it (the killing blow, or most of the damage in the
 -- last 10 s when a pet or guard finished the job) it becomes an incident
 -- against that player. Members who were offline catch up when they log in.
--- When a reported player shows up (nameplate, target, mouseover or the
--- combat log) you get a warning, the guild hears about it, and the
+-- When a reported player shows up (nameplate, target or mouseover; the
+-- combat log is closed to addons on Forever) you get a warning, the guild hears about it, and the
 -- player's tooltip shows the record. Incidents are kept for 30 days.
 --
 -- Guild channel:
@@ -286,14 +286,6 @@ local function CheckUnit(unit)
 	Seen(UnitGUID(unit), UnitName(unit), UnitLevel(unit))
 end
 
-local HOSTILE_PLAYER = bit.bor(COMBATLOG_OBJECT_TYPE_PLAYER or 0x400, COMBATLOG_OBJECT_REACTION_HOSTILE or 0x40)
-local function OnCombatLog()
-	local _, _, _, srcGUID, srcName, srcFlags = CombatLogGetCurrentEventInfo()
-	if srcGUID and srcFlags and bit.band(srcFlags, HOSTILE_PLAYER) == HOSTILE_PLAYER then
-		if byGUID[srcGUID] then Seen(srcGUID, srcName) end
-	end
-end
-
 local function OnSeen(sender, f)
 	local guid, name, zone, level = f[2] ~= "" and f[2] or nil, f[3], f[4], tonumber(f[5])
 	local s = ns.Suspect(guid, name)
@@ -370,7 +362,8 @@ function ns.Wanted()
 end
 
 local events = CreateFrame("Frame")
-for _, event in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "CHAT_MSG_ADDON", "COMBAT_LOG_EVENT_UNFILTERED",
+-- No combat log: Forever's client (like current retail) blocks addons from it.
+for _, event in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "CHAT_MSG_ADDON",
 	"NAME_PLATE_UNIT_ADDED", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT" }) do
 	pcall(events.RegisterEvent, events, event)
 end
@@ -399,8 +392,6 @@ events:SetScript("OnEvent", function(_, event, ...)
 		OnAddonMessage(...)
 	elseif not next(ns.suspects) then
 		return   -- nobody reported: nothing to look for
-	elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
-		OnCombatLog()
 	elseif event == "NAME_PLATE_UNIT_ADDED" then
 		CheckUnit(...)
 	elseif event == "PLAYER_TARGET_CHANGED" then

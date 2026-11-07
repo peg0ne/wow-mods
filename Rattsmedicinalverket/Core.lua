@@ -277,8 +277,11 @@ local function OnAddonMessage(prefix, msg, channel, sender)
 end
 
 local events = CreateFrame("Frame")
+-- The combat log is closed to addons on Forever (registering for it gets the
+-- addon blocked), so for now deaths are recorded without a killer.
+-- TODO: read the killer from the Death Recap if the client allows it.
 for _, event in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "CHAT_MSG_ADDON", "PLAYER_DEAD",
-	"COMBAT_LOG_EVENT_UNFILTERED", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "NAME_PLATE_UNIT_ADDED" }) do
+	"PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "NAME_PLATE_UNIT_ADDED" }) do
 	pcall(events.RegisterEvent, events, event)
 end
 

@@ -28,7 +28,62 @@ local NAMES = {
 	"WorldMapFrame.ScrollContainer.Child", "UISpecialFrames", "C_Timer.NewTicker", "bit.band", "strsplit",
 	"Settings.RegisterCanvasLayoutCategory", "InterfaceOptions_AddCategory", "C_AddOns.GetAddOnInfo",
 	"GetAddOnInfo", "C_QuestLog.GetInfo", "GetQuestLogTitle", "C_Item.GetItemQualityColor",
+	-- round 2: death recap, restrictions, modern professions, names
+	"C_DeathRecap", "C_DeathRecap.GetRecapEvents", "C_DeathRecap.HasRecapEvents", "C_DeathRecap.GetRecapLink",
+	"C_DeathRecap.GetRecapMaxHealth", "DeathRecap_GetEvents", "DeathRecap_HasEvents", "GetDeathRecapLink",
+	"DeathRecapFrame", "C_DamageMeter", "issecretvalue", "C_Secrets", "C_CombatLog", "C_EventUtils.IsEventValid",
+	"C_TradeSkillUI.GetProfessionInfoBySkillLineID", "C_TradeSkillUI.GetChildProfessionInfo",
+	"C_TradeSkillUI.GetRecipeCooldown", "C_TradeSkillUI.GetRecipeOutputItemData", "C_TradeSkillUI.GetRecipeSchematic",
+	"C_TradeSkillUI.GetRecipeItemLink", "C_TradeSkillUI.GetRecipeLink", "C_TradeSkillUI.IsTradeSkillLinked",
+	"C_TradeSkillUI.IsTradeSkillGuild", "C_TradeSkillUI.IsNPCCrafting", "C_TradeSkillUI.GetProfessionInfoByRecipeID",
+	"C_TradeSkillUI.OpenTradeSkill", "ProfessionsFrame", "TradeSkillFrame", "C_Item.GetItemNameByID",
+	"C_TooltipInfo", "Enum.TooltipDataType.Item", "Enum.TooltipDataType.Unit", "C_Spell.GetSpellCooldown",
+	"UnitIsFriend", "UnitIsEnemy", "PlaySound", "GetRealZoneText", "C_Map.GetMapInfo",
 }
+
+-- Events that may or may not exist on this client.
+local EVENTS = {
+	"COMBAT_LOG_EVENT_UNFILTERED", "PLAYER_DEAD", "NAME_PLATE_UNIT_ADDED", "MERCHANT_SHOW",
+	"GET_ITEM_INFO_RECEIVED", "ITEM_DATA_LOAD_RESULT", "SKILL_LINES_CHANGED", "TRADE_SKILL_SHOW",
+	"TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED", "TRADE_SKILL_CLOSE", "NEW_RECIPE_LEARNED",
+	"CRAFT_SHOW", "CRAFT_UPDATE", "TRADE_SKILL_UPDATE", "CHAT_MSG_COMBAT_HOSTILE_DEATH", "CHAT_MSG_COMBAT_SELF_HITS",
+	"UNIT_HEALTH", "PLAYER_ENTERING_WORLD", "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN",
+	"UPDATE_MOUSEOVER_UNIT", "ZONE_CHANGED_NEW_AREA", "TIME_PLAYED_MSG", "PLAYER_LEVEL_UP",
+}
+
+-- Record every blocked or forbidden action, whoever caused it.
+ApiProbeBlocked = {}
+local watcher = CreateFrame("Frame")
+watcher:RegisterEvent("ADDON_ACTION_BLOCKED")
+watcher:RegisterEvent("ADDON_ACTION_FORBIDDEN")
+watcher:SetScript("OnEvent", function(_, event, addon, func)
+	table.insert(ApiProbeBlocked, { event = event, addon = tostring(addon), func = tostring(func), t = date and date("%H:%M:%S") })
+	if ApiProbeDB then ApiProbeDB.blocked = ApiProbeBlocked end
+end)
+
+-- Death recap: what the most recent recaps hold, if addons may read them.
+local function RecapSample()
+	local C = C_DeathRecap
+	if not C or not C.GetRecapEvents then return end
+	local sample = {}
+	for id = 1, 20 do
+		local ok, has = pcall(C.HasRecapEvents or function() return true end, id)
+		if ok and has then
+			local ok2, events = pcall(C.GetRecapEvents, id)
+			if ok2 and type(events) == "table" then
+				local last = events[1]
+				local copy = {}
+				if type(last) == "table" then
+					for k, v in pairs(last) do copy[k] = (type(v) == "number" or type(v) == "string" or type(v) == "boolean") and v or type(v) end
+				end
+				sample[id] = { count = #events, first = copy }
+			else
+				sample[id] = { error = tostring(events) }
+			end
+		end
+	end
+	return sample
+end
 
 local function Lookup(path)
 	local value = _G
@@ -62,14 +117,70 @@ local function Probe()
 		local info = C_Spell.GetSpellInfo(2550)
 		result.spellInfoCooking = type(info) == "table" and info or { info }
 	end
-	result.time = date and time() or nil
+	result.events = {}
+	if C_EventUtils and C_EventUtils.IsEventValid then
+		for _, event in ipairs(EVENTS) do result.events[event] = C_EventUtils.IsEventValid(event) and true or false end
+	end
+	result.recap = RecapSample()
+	-- Own professions through the modern API.
+	if GetProfessions then
+		result.professions = {}
+		for _, index in ipairs({ GetProfessions() }) do
+			if index then
+				local name, _, rank, max, _, _, skillLine = GetProfessionInfo(index)
+				table.insert(result.professions, { name = name, rank = rank, max = max, skillLine = skillLine })
+			end
+		end
+	end
+	result.blocked = ApiProbeBlocked
+	result.time = time()
 	ApiProbeDB = result
 	return result
 end
 
 local f = CreateFrame("Frame")
 f:RegisterEvent("PLAYER_LOGIN")
+f:RegisterEvent("PLAYER_DEAD")
 f:SetScript("OnEvent", function() C_Timer.After(5, Probe) end)
+
+-- Opening a profession window: record what the modern API says about it.
+local tf = CreateFrame("Frame")
+pcall(tf.RegisterEvent, tf, "TRADE_SKILL_SHOW")
+pcall(tf.RegisterEvent, tf, "TRADE_SKILL_LIST_UPDATE")
+tf:SetScript("OnEvent", function(_, event)
+	C_Timer.After(1, function()
+		local T = C_TradeSkillUI
+		if not T or not ApiProbeDB then return end
+		local s = { event = event }
+		local ok, base = pcall(T.GetBaseProfessionInfo)
+		if ok and type(base) == "table" then
+			s.base = {}
+			for k, v in pairs(base) do if type(v) ~= "table" then s.base[k] = v end end
+		end
+		local ok2, ids = pcall(T.GetAllRecipeIDs)
+		if ok2 and type(ids) == "table" then
+			s.recipeCount = #ids
+			s.recipes = {}
+			for i = 1, math.min(5, #ids) do
+				local info = T.GetRecipeInfo(ids[i])
+				local r = { id = ids[i] }
+				if type(info) == "table" then
+					for k, v in pairs(info) do if type(v) ~= "table" and type(v) ~= "function" then r[k] = v end end
+				end
+				if T.GetRecipeOutputItemData then
+					local okOut, out = pcall(T.GetRecipeOutputItemData, ids[i])
+					if okOut and type(out) == "table" then r.outputItemID, r.outputHyperlink = out.itemID, out.hyperlink end
+				end
+				if T.GetRecipeCooldown then
+					local okCd, cd = pcall(T.GetRecipeCooldown, ids[i])
+					if okCd then r.cooldown = cd end
+				end
+				table.insert(s.recipes, r)
+			end
+		end
+		ApiProbeDB.tradeSkill = s
+	end)
+end)
 
 SLASH_APIPROBE1 = "/probe"
 SlashCmdList.APIPROBE = function()
