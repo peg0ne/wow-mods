@@ -138,7 +138,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 - Requires Rättsmedicinalverket. Every member with the addon writes the obituary in their own chat from the death record they already received, so nothing extra is sent and nothing can be blocked.
 - Example: "Vår kära Tungan Lingonsson (nivå 13 Rogue) har lämnat oss. Rycktes bort av en Decrepit Darkhound i Tirisfal Glades. Det var dödsfall nummer 2. Vila i frid."
 - Wording is picked at random from lists in `Core.lua`, seeded by the death's id, so everyone sees the same text. It covers NPCs, abilities, hostile players ("Polisen är underrättad"), pets, falling, drowning and lava. There's an extra line when the killer was 5+ levels below the victim.
-- `/dodsannons` lists the last 10, `/dodsannons tyst` hides new ones in chat. `/dodsannons gillet` also posts your own obituary to the real guild chat for members without the addon; it's off by default because this client might block sending chat.
+- `/dodsannons` lists the last 10, `/dodsannons tyst` hides new ones in chat. Your own obituary is also posted to guild chat 2 s after you die (on by default, for members without the addon and the guild's Discord bridge; `/dodsannons gillet` turns it off). Members with the addon hide that guild line, since they already show the notice.
 - Polisen already files the report for player kills, through Rättsmedicinalverket.
 
 ### Fun extras (social)

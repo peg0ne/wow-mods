@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Gildepanel
 ## Notes: A panel and minimap button for THÖNDERSTÖRM: your Skatteverket standing and tax, the guild's favourites, who is online, and your Swedbank loans, plus an Addons window that opens the other guild addons and toggles their automatic settings. Only reads what Skatteverket and Swedbank save; sends nothing.
-## Version: 1.2
+## Version: 1.3
 ## OptionalDeps: Skatteverket, Swedbank
 ## SavedVariables: GildepanelDB
 Gildepanel.lua

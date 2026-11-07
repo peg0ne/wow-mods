@@ -98,9 +98,16 @@ local function ShowTooltip(row)
 	else
 		GameTooltip:AddLine(item.me and "du" or item.name)
 		for prof, p in pairs(item.profs) do
-			local n = 0
-			for _ in pairs(p.items) do n = n + 1 end
-			GameTooltip:AddLine(string.format("%s %d/%d, %d recept", prof, p.rank or 0, p.max or 0, n), 1, 1, 1)
+			if item.registry then
+				GameTooltip:AddLine(string.format("%s %d", prof, p.rank or 0), 1, 1, 1)
+			else
+				local n = 0
+				for _ in pairs(p.items) do n = n + 1 end
+				GameTooltip:AddLine(string.format("%s %d/%d, %d recept", prof, p.rank or 0, p.max or 0, n), 1, 1, 1)
+			end
+		end
+		if item.registry then
+			GameTooltip:AddLine("Nivåer från Skatteverkets yrkesregister; har inte Skolverket, så recepten är okända.", 0.6, 0.6, 0.6, true)
 		end
 	end
 	GameTooltip:Show()
@@ -267,7 +274,8 @@ local function FillRow(row, item)
 	else
 		local profs = {}
 		for prof, p in pairs(item.profs) do
-			table.insert(profs, string.format("%s %d/%d", prof, p.rank or 0, p.max or 0))
+			table.insert(profs, p.max and string.format("%s %d/%d", prof, p.rank or 0, p.max)
+				or string.format("%s %d", prof, p.rank or 0))
 		end
 		table.sort(profs)
 		row.cells[1]:SetText(PersonText(item))

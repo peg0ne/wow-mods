@@ -2,10 +2,11 @@
 -- Rättsmedicinalverket hands every member the record of every guild
 -- member's death; this turns each one into a short newspaper-style notice
 -- in chat. Nothing is sent: everyone with the addon writes the notice
--- themselves, so it costs no messages and cannot be blocked. A member who
--- turns on /dodsannons gillet also posts their own obituary in guild chat,
--- for members without the addon (only the one who died posts, so there
--- are no duplicates).
+-- themselves, so it costs no messages and cannot be blocked. The one who
+-- died also posts their own obituary in guild chat (on by default; off
+-- with /dodsannons gillet), for members without the addon and the guild's
+-- Discord bridge. Only the one who died posts, and members with the addon
+-- hide that line, since they already have the notice.
 --
 -- Wording is picked at random from the lists below, but the same death
 -- always gets the same wording on every computer (seeded by the death's id).
@@ -18,6 +19,14 @@ local KEEP = 50
 
 local db
 local shown = {}   -- death ids already announced this session
+local ownCopy = {} -- guild chat lines we already show ourselves
+
+-- The obituary as it goes out in guild chat (at most 255 bytes).
+local function GuildLine(text)
+	local line = "Dödsannons: " .. text
+	if #line > 255 then line = line:sub(1, 252) .. "..." end
+	return line
+end
 
 local function Print(text)
 	DEFAULT_CHAT_FRAME:AddMessage("|cffbbbbbbDödsannonser:|r " .. text)
@@ -173,13 +182,28 @@ local function OnDeath(r)
 			pcall(PlaySound, SOUNDKIT.UI_BNET_TOAST)
 		end
 	end
+	ownCopy[GuildLine(text)] = true
 	if r.me and db.guildChat and IsInGuild() then
-		local line = "Dödsannons: " .. text
-		if #line > 255 then line = line:sub(1, 252) .. "..." end
-		-- Newer clients moved it into C_ChatInfo.
-		local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
-		if send then send(line, "GUILD") end
+		-- Wait a little: Rättsmedicinalverket's record must reach the others
+		-- before this line does, so their filter knows to hide it.
+		C_Timer.After(2, function()
+			-- Newer clients moved it into C_ChatInfo.
+			local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
+			if send then send(GuildLine(text), "GUILD") end
+		end)
 	end
+end
+
+-- Members with the addon already have the notice in their own chat; hide
+-- the copy the victim posts in guild chat (it is there for members
+-- without the addon, and for the Discord bridge). With /dodsannons tyst
+-- the guild line is the only one, so it stays.
+if ChatFrame_AddMessageEventFilter then
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_GUILD", function(_, _, msg)
+		if db and not db.quiet and type(msg) == "string" and not (issecretvalue and issecretvalue(msg)) and ownCopy[msg] then
+			return true
+		end
+	end)
 end
 
 local function Ago(t)
@@ -196,7 +220,12 @@ events:SetScript("OnEvent", function(_, _, name)
 	DodsannonserDB = DodsannonserDB or {}
 	db = DodsannonserDB
 	db.recent = db.recent or {}
-	for _, n in ipairs(db.recent) do shown[n.id] = true end
+	-- On by default, so the guild's Discord bridge gets every obituary.
+	if db.guildChat == nil then db.guildChat = true end
+	for _, n in ipairs(db.recent) do
+		shown[n.id] = true
+		ownCopy[GuildLine(n.text)] = true
+	end
 	Rattsmedicinalverket.Register(OnDeath)
 end)
 

@@ -366,6 +366,23 @@ local function Build()
 
 	-- Skatteverket
 	Section(body, "Skatteverket", -34)
+	-- Your skattenummer, or a way to sign up when you have not yet.
+	local reg = CreateFrame("Button", nil, body)
+	reg:SetSize(150, 16)
+	reg:SetPoint("TOPRIGHT", -PAD, -32)
+	reg.text = reg:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	reg.text:SetPoint("RIGHT")
+	reg.text:SetJustifyH("RIGHT")
+	reg:SetScript("OnClick", function(self)
+		RunSlash("SKATTEVERKET", self.signed and "yrken" or "anmälan")
+	end)
+	reg:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+		GameTooltip:AddLine(self.signed and "Klicka: Skatteverkets yrkesregister" or "Klicka: skriv under anmälan till Skatteverket")
+		GameTooltip:Show()
+	end)
+	reg:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	body.reg = reg
 	body.standing = Text(body, "GameFontNormalLarge", "TOPLEFT", PAD, -58)
 	body.rate = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	body.rate:SetPoint("TOPRIGHT", -PAD, -61)
@@ -472,10 +489,22 @@ local function RefreshTax(s)
 		body.rate:SetText("")
 		for _, fs in ipairs({ body.owed, body.income, body.paid, body.last }) do fs:SetText("-") end
 		body.pay:Disable()
+		body.reg.text:SetText("")
 		return
 	end
 	local c = s.c
 	body.rate:SetText(format("Skattesats %g %%", ((SkatteverketDB and SkatteverketDB.rate) or 0.05) * 100))
+	-- Registration (Skatteverket 0.12): SkatteverketCharDB.reg once signed,
+	-- with the number the guild leader hands out.
+	local reg = c.reg
+	body.reg.signed = reg and true or false
+	if not reg then
+		body.reg.text:SetText("|cffff8040Inte anmäld, klicka|r")
+	elseif reg.number and reg.number > 0 then
+		body.reg.text:SetText(format("|cffd0d0d0Skattenummer|r TS-%04d", reg.number))
+	else
+		body.reg.text:SetText("|cffd0d0d0Anmäld, väntar på nummer|r")
+	end
 	body.owed:SetText(Money(math.max(s.owed, 0)))
 	body.income:SetText(Money(c.incomeSince))
 	body.paid:SetText(Money(c.paid))
@@ -679,6 +708,8 @@ local WINDOWS = {
 	{ "Polisen", "Polisen", "POLISEN" },
 	{ "SCB", "SCB", "SCB" },
 	{ "Skatteverket", "Skatteverket", "SKATTEVERKET" },
+	{ "Skatteverket", "Yrkesregister", "SKATTEVERKET", "yrken" },
+	{ "Skatteverket", "Anmälan", "SKATTEVERKET", "anmälan" },
 	{ "Swedbank", "Swedbank", "SWEDBANK" },
 	{ "Dodsannonser", "Dödsannonser", "DODSANNONSER" },
 }
@@ -699,7 +730,7 @@ local SETTINGS = {
 	} },
 	{ addon = "Dodsannonser", title = "Dödsannonser", db = "DodsannonserDB", items = {
 		{ key = "quiet", label = "Visa nya i chatten", invert = true },
-		{ key = "guildChat", label = "Skriv min egen i gillechatten" },
+		{ key = "guildChat", label = "Skriv min egen i gillechatten", default = true },
 	} },
 	{ addon = "Polisen", title = "Polisen", db = "PolisenDB", items = {
 		{ key = "alarm", label = "Varning på skärmen och ljud", default = true },
@@ -810,7 +841,7 @@ local function BuildHub()
 	local bw = (HW - 2 * PAD - 8) / 2
 	local y = -58
 	for i, w in ipairs(WINDOWS) do
-		local b = Button(hub, w[2], bw, function() RunSlash(w[3], "", w[2]) end)
+		local b = Button(hub, w[2], bw, function() RunSlash(w[3], w[4] or "", w[2]) end)
 		b.addon, b.key = w[1], w[3]
 		local col = (i - 1) % 2
 		b:SetPoint("TOPLEFT", PAD + col * (bw + 8), y)

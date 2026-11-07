@@ -36,6 +36,7 @@ local requested = {}         -- "owner;prof" -> GetTime() we last wanted it (or 
 local heard = {}             -- "owner;prof" -> GetTime() we last heard someone ask for it
 local sentProf = {}          -- prof -> GetTime() we last sent it
 local lastHello, lastAnswer, lastAsk, warnedVersion = nil, 0, 0, false
+local inGuild                -- name -> true from the last full roster, or nil before it loads
 
 -- Forever's client has the modern API only: C_Item and C_Spell, not the
 -- old globals.
@@ -518,6 +519,7 @@ local function OnRoster()
 	end
 	ns.online = online
 	if GetGuildRosterShowOffline and GetGuildRosterShowOffline() then
+		inGuild = all
 		for name in pairs(db.members) do
 			if not all[name] then db.members[name] = nil end
 		end
@@ -528,17 +530,50 @@ end
 ---------------------------------------------------------------------------
 -- Lookups for the window and tooltips.
 
--- Everyone with professions, own character first: { name, me, online, profs }.
+-- Skatteverket (0.12 and later) keeps a guild-wide registry of professions
+-- and levels for everyone who has signed up, offline members too. It is
+-- read only, to list members who do not run Skolverket; they have no
+-- recipes, just professions and ranks. Codes as Skatteverket sends them;
+-- Fishing is left out here as everywhere in Skolverket.
+local REGISTRY_CODES = {
+	ALC = "Alchemy", BS = "Blacksmithing", ENC = "Enchanting", ENG = "Engineering", HER = "Herbalism",
+	LW = "Leatherworking", MIN = "Mining", SKI = "Skinning", TAI = "Tailoring", COO = "Cooking", FA = "First Aid",
+}
+local function RegistryPeople(have)
+	local members = SkatteverketDB and type(SkatteverketDB.members) == "table" and SkatteverketDB.members
+	if not members then return {} end
+	local list = {}
+	for name, m in pairs(members) do
+		if type(m) == "table" and type(m.profs) == "string" and m.profs ~= "" and not have[name]
+			and not ns.IsMe(name) and (not inGuild or inGuild[name]) then
+			local profs = {}
+			for code, level in m.profs:gmatch("(%u+)(%d+)") do
+				local prof = REGISTRY_CODES[code]
+				if prof then profs[prof] = { rank = tonumber(level), items = {}, cd = {} } end
+			end
+			if next(profs) then
+				table.insert(list, { name = name, online = ns.online[name] and true or false, seen = m.lastSeen,
+					profs = profs, registry = true })
+			end
+		end
+	end
+	return list
+end
+
+-- Everyone with professions, own character first: { name, me, online, profs,
+-- registry (only Skatteverket's levels, no recipes) }.
 function ns.People()
-	local people = {}
+	local people, have = {}, {}
 	if char and next(char.profs) then
 		table.insert(people, { name = ns.Me() or UnitName("player"), me = true, online = true, profs = char.profs })
 	end
 	for name, m in pairs(db.members) do
 		if not ns.IsMe(name) and next(m.profs) then
 			table.insert(people, { name = name, online = ns.online[name] and true or false, seen = m.seen, profs = m.profs })
+			have[name] = true
 		end
 	end
+	for _, p in ipairs(RegistryPeople(have)) do table.insert(people, p) end
 	return people
 end
 
