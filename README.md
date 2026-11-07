@@ -44,7 +44,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 
 | Addon | Version | Status |
 |---|---|---|
-| Atervinningscentralen | 0.1 | Built; loads in game (`/avc` works), vendor run not yet tested |
+| Atervinningscentralen | 0.1 | Works in game (sells grays, repairs) |
 | Skolverket | 0.1 | Built, not yet tested in game |
 | Eniro | 0.1 | Built, not yet tested in game |
 | Rattsmedicinalverket | 0.1 | Built, not yet tested in game |
