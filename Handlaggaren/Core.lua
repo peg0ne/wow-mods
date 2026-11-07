@@ -241,7 +241,7 @@ SlashCmdList.HANDLAGGAREN = function(msg)
 		Status()
 		return
 	end
-	local aliases = { belöning = "pickBest", beloning = "pickBest", dela = "share", prat = "gossip", ["grå"] = "trivial", gra = "trivial" }
+	local aliases = { ["belöning"] = "pickBest", beloning = "pickBest", dela = "share", prat = "gossip", ["grå"] = "trivial", gra = "trivial" }
 	local key = aliases[cmd]
 	if not key then
 		Print("/hl visar inställningarna. /hl av | på, /hl belöning, /hl dela, /hl prat, /hl grå slår av eller på.")
