@@ -136,6 +136,9 @@ local function Rebuild()
 	local suspects = {}
 	byGUID, byName = {}, {}
 	local cutoff = time() - KEEP_DAYS * 86400
+	for id, t in pairs(db.forgotten) do
+		if t < cutoff then db.forgotten[id] = nil end
+	end
 	for id, inc in pairs(db.incidents) do
 		if inc.time < cutoff then
 			db.incidents[id] = nil
@@ -177,7 +180,7 @@ function ns.Suspect(guid, name)
 end
 
 local function Add(inc)
-	if db.incidents[inc.id] or inc.time < time() - KEEP_DAYS * 86400 then return false end
+	if db.incidents[inc.id] or db.forgotten[inc.id] or inc.time < time() - KEEP_DAYS * 86400 then return false end
 	db.incidents[inc.id] = inc
 	return true
 end
@@ -344,9 +347,15 @@ local function OnAddonMessage(prefix, msg, channel, sender)
 	end
 end
 
+-- Forgotten incidents are remembered by id until they would have expired,
+-- so another member's catch-up answer cannot bring them back. A new
+-- incident by the same player still counts.
 function ns.Forget(key)
 	for id, inc in pairs(db.incidents) do
-		if (inc.guid or ("n:" .. inc.suspect)) == key then db.incidents[id] = nil end
+		if (inc.guid or ("n:" .. inc.suspect)) == key then
+			db.incidents[id] = nil
+			db.forgotten[id] = inc.time
+		end
 	end
 	Changed()
 end
@@ -383,6 +392,7 @@ events:SetScript("OnEvent", function(_, event, ...)
 			PolisenDB = PolisenDB or {}
 			db = PolisenDB
 			db.incidents = db.incidents or {}
+			db.forgotten = db.forgotten or {}
 			if db.alarm == nil then db.alarm = true end
 			ns.db = db
 			Rebuild()

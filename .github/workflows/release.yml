@@ -16,6 +16,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # WoW runs Lua 5.1; a file that does not compile stops the release.
+      - name: Check Lua syntax
+        run: |
+          sudo apt-get install -y -qq lua5.1 >/dev/null
+          luac5.1 -v
+          find . -name '*.lua' -not -path './.git/*' -print0 | xargs -0 -n1 luac5.1 -p
+
       - name: Zip the addons
         run: |
           # WowUp-CF only downloads a zip whose name ends in -forever for the

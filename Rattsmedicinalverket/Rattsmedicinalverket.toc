@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: Rättsmedicinalverket
 ## Notes: Death records for THÖNDERSTÖRM: works out what killed you (killing blow, hostile players who hit you in the last 10 s, falling, drowning ...) and tells the guild. Other addons (Polisen) build on it; it shows nothing itself.
-## Version: 0.1
+## Version: 0.2
 ## SavedVariables: RattsmedicinalverketDB
 Core.lua

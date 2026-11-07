@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Polisen
 ## Notes: PvP incident log for THÖNDERSTÖRM: hostile players who kill guild members are reported, you get a warning when one shows up, the guild hears who spotted whom, and their tooltip shows the record. /polisen lists the wanted and recent incidents. Needs Rättsmedicinalverket.
-## Version: 0.1
+## Version: 0.2
 ## Dependencies: Rattsmedicinalverket
 ## SavedVariables: PolisenDB
 Core.lua

@@ -80,10 +80,15 @@ function ns.Post(text, tank, heal, dps, quest)
 		math.max(0, math.min(9, tonumber(dps) or 0))
 	if text == "" then ns.Print("skriv vad gruppen ska göra, till exempel Scholomance.") return false end
 	if tank + heal + dps == 0 then ns.Print("ange hur många tankar, helare eller DPS du behöver.") return false end
+	-- Updating keeps the id, so applicants stay applied (their clients drop
+	-- an application when the id changes) and nobody gets a second chat line.
 	local old = ns.myListing
-	if old then ns.Send("X;" .. old.id) end
-	ns.char.nextId = (ns.char.nextId or 0) + 1
-	ns.myListing = { id = ns.char.nextId, tank = tank, heal = heal, dps = dps, quest = quest, text = text,
+	local id = old and old.id
+	if not id then
+		ns.char.nextId = (ns.char.nextId or 0) + 1
+		id = ns.char.nextId
+	end
+	ns.myListing = { id = id, tank = tank, heal = heal, dps = dps, quest = quest, text = text,
 		posted = time(), applicants = old and old.applicants or {} }
 	Save()
 	Broadcast()

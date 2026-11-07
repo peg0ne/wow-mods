@@ -215,10 +215,13 @@ local function Broadcast(r)
 		r.stamp,
 	}
 	for i, v in ipairs(fields) do fields[i] = tostring(v) end
+	-- Too long: empty the least needed text fields (subzone, races, ability,
+	-- zone) rather than cut the end, where the stamp that makes the id is.
 	local msg = table.concat(fields, ";")
-	if #msg > 254 then
-		fields[16] = ""   -- subzone is the least needed
-		msg = table.concat(fields, ";"):sub(1, 254)
+	for _, i in ipairs({ 16, 24, 10, 12, 15 }) do
+		if #msg <= 254 then break end
+		fields[i] = ""
+		msg = table.concat(fields, ";")
 	end
 	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
 		C_ChatInfo.SendAddonMessage(ns.PREFIX, msg, "GUILD")
