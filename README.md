@@ -49,6 +49,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Eniro | 0.1 | Works in game (member list); position sharing not yet tested (needs a second member) |
 | Rattsmedicinalverket | 0.1 | Works in game (killer, level, ability, position from the Death Recap) |
 | Polisen | 0.1 | Loads without errors; reports need a death to a hostile player |
+| Dodsannonser | 0.1 | Built, not yet tested in game |
 
 ## Accepted ideas
 
@@ -124,10 +125,12 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 - Fun facts, for example "THÖNDERSTÖRM has died 1,412 times; 38% of those were falling".
 - Can reuse the gold counting from Skatteverket and the death detection from Polisen and Dödsannonser.
 
-### Dödsannonser: obituaries (social)
-- When a guild member dies, posts a newspaper-style obituary in guild chat: "Our beloved Pelle, level 34, was taken from us by a Murloc in Westfall."
-- Gets the killer from the last damage event in the combat log. Only one player should post (the person who died) to avoid duplicates.
-- Ties into Polisen: if the killer was a hostile player, it files a report there as well.
+### Dödsannonser: obituaries (built, v0.1)
+- Requires Rättsmedicinalverket. Every member with the addon writes the obituary in their own chat from the death record they already received, so nothing extra is sent and nothing can be blocked.
+- Example: "Vår kära Tungan Lingonsson (nivå 13 Rogue) har lämnat oss. Rycktes bort av en Decrepit Darkhound i Tirisfal Glades. Det var dödsfall nummer 2. Vila i frid."
+- Wording is picked at random from lists in `Core.lua`, seeded by the death's id, so everyone sees the same text. It covers NPCs, abilities, hostile players ("Polisen är underrättad"), pets, falling, drowning and lava. There's an extra line when the killer was 5+ levels below the victim.
+- `/dodsannons` lists the last 10, `/dodsannons tyst` hides new ones in chat. `/dodsannons gillet` also posts your own obituary to the real guild chat for members without the addon; it's off by default because this client might block sending chat.
+- Polisen already files the report for player kills, through Rättsmedicinalverket.
 
 ### Fun extras (social)
 - **Fotoalbum:** takes a screenshot (`Screenshot()`) on level-up, epic loot or a boss kill, and keeps a list with dates.
