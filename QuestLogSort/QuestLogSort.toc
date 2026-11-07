@@ -1,0 +1,5 @@
+## Interface: 16001
+## Title: QuestLogSort
+## Notes: Completed quests last in the quest log (per zone) and in the quest tracker, which is also sorted by level.
+## Version: 1.1
+QuestLogSort.lua
