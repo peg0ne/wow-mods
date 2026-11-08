@@ -161,16 +161,19 @@ end
 -- (newer trackers, one copy per block mixin) or the module's SetBlockHeader
 -- (older ones). After it runs we call it again with the label added, so the
 -- tracker measures the longer title itself before laying the block out.
--- A block is only labelled when its title is the quest's title, so blocks
--- for achievements or other things with the same ID are left alone.
+-- A block is only labelled when its title contains the quest's title, so
+-- blocks for achievements or other things with the same ID are left alone.
 
 local hookedTables = {}
 
 local function TrackerLabel(block, text)
-	local id = block and block.id
+	local id = block and (block.poiQuestID or block.questID or block.id)
 	if type(id) ~= "number" or type(text) ~= "string" or not quests[id] then return end
-	if text ~= Name(id) and text ~= quests[id][1] then return end
-	return Label(id)
+	if issecretvalue and issecretvalue(text) then return end
+	-- The title may come with the level in front, like "[21] Beren's Peril".
+	if not text:find(Name(id), 1, true) and not text:find(quests[id][1], 1, true) then return end
+	local label = Label(id)
+	if label and not text:find(label, 1, true) then return label end
 end
 
 local function HookTracker()
@@ -238,6 +241,7 @@ events:SetScript("OnEvent", function(_, event, ...)
 	elseif event == "ADDON_LOADED" and ... == "Kolapp" then
 		KolappDB = KolappDB or {}
 		db = KolappDB
+		db.trace = nil -- left by a 0.1 diagnostic
 		for k, v in pairs(defaults) do
 			if db[k] == nil then db[k] = v end
 		end
