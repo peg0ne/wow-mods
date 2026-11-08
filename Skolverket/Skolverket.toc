@@ -1,7 +1,8 @@
 ## Interface: 16001
 ## Title: Skolverket
-## Notes: Guild crafting directory for THÖNDERSTÖRM: /skola shows who in the guild can craft what (online or not), their profession cooldowns, and everyone's professions. Item tooltips name the guild members who can craft the item.
-## Version: 0.2
+## Notes: Profession cooldowns for THÖNDERSTÖRM (/skola), and item tooltips naming the guild members who can craft the item (from Skatteverket's recipe lists). Recipes and professions themselves are in Skatteverket's /skatt yrken.
+## Version: 0.3
+## OptionalDeps: Skatteverket
 ## SavedVariables: SkolverketDB
 ## SavedVariablesPerCharacter: SkolverketCharDB
 Core.lua

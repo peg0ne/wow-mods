@@ -10,7 +10,7 @@ Guild addons are named after Swedish public institutions and companies.
 | Arbetsformedlingen | Shared quests (`/uppdrag`) and the Platsbanken group-finder board (`/platsbanken`) |
 | Skatteverket | Guild tax on looted gold, vendor and auction sales; standings in `/skatt` |
 | Swedbank | Guild loans; only the guild leader sees applications |
-| Gildepanel | Minimap button and panel that reads the Skatteverket and Swedbank data (sends nothing); its Addons window (`/gpanel addons`, Shift- or middle-click the minimap button) opens the other addons' windows and toggles their automatic settings |
+| Gildepanel | The Addons window (`/gpanel`): opens the other addons' windows and toggles their automatic settings; warns 6 hours before your Skatteverket standing drops. Its panel and minimap button were retired in 2.0, because Skatteverket 0.22 has its own (`/skatt` with a Swedbank tab, and a minimap button) |
 | QuestLogSort | Puts completed quests last in the quest log and tracker; sorts the tracker by level |
 
 Guild addons share data through `C_ChatInfo.SendAddonMessage` on the GUILD channel and store it in SavedVariables.
@@ -50,7 +50,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Addon | Version | Status |
 |---|---|---|
 | Atervinningscentralen | 0.1 | Works in game (sells grays, repairs) |
-| Skolverket | 0.1 | Works in game for your own recipes and the item tooltip; guild sync not yet tested (needs a second member) |
+| Skolverket | 0.3 | Cut down to cooldowns and the item tooltip (reads Skatteverket's recipes); not yet tested in game |
 | Eniro | 0.1 | Works in game (member list); position sharing not yet tested (needs a second member) |
 | Rattsmedicinalverket | 0.1 | Works in game (killer, level, ability, position from the Death Recap) |
 | Polisen | 0.1 | Loads without errors; reports need a death to a hostile player |
@@ -61,14 +61,11 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 
 ## Accepted ideas
 
-### Skolverket: guild crafting directory (built, v0.1)
-- Opening a profession window saves its recipes, only ever adding (recipes are never unlearned, so collapsed headers and filters lose nothing). Enchanting is read through the Craft API.
-- Professions and ranks come from the skill list, so they show before the window has been opened. A profession that disappears from the skill list (unlearned) is dropped, but only if no skill headers are collapsed.
-- Sync (prefix `SKOLA`, protocol documented at the top of `Core.lua`): members announce each profession's rank and the time it last changed. Anyone with older data asks for it, and everyone who's online hears the answer. All data is kept between sessions, so offline crafters can be found.
-- Outgoing messages are queued: a burst of 8, then 1 per second, because the server drops addon messages sent too fast.
-- `/skola [search]` opens a window with three views: Recept (search, Shift-click to link, "Fråga" whispers the best online crafter), Cooldowns (shared cooldowns such as transmutes grouped), and Medlemmar (everyone's professions and when they were last seen).
-- Item tooltips get a line: "Skolverket: Pelle, Kalle" (green online, grey offline).
-- Limitations for now: a member's data spreads only while that member is online (nobody passes on someone else's data). Cooldowns only update when the owner opens the profession window.
+### Skolverket: cooldowns and crafters on tooltips (built, v0.3)
+- 0.1-0.2 were a whole guild crafting directory. Skatteverket 0.22 has one now (`/skatt yrken`: professions, every member's recipes with search, a recipe window, and offline members' lists relayed by the guild leader), so 0.3 (2026-11-08) keeps only what Skatteverket lacks.
+- Item tooltips get a line "Kan tillverkas av: Pelle, Kalle" (green online, grey offline), read from `SkatteverketDB.recipes`. On Forever those lists hold recipe numbers (`s<recipeID>`), so the item each recipe makes is looked up once with `C_TradeSkillUI.GetRecipeSchematic`. Nothing is sent for this.
+- Profession cooldowns: read when you open a profession window, shared on the guild channel (prefix `SKOLA`, messages `Q` and `C`, documented in `Core.lua`; 0.2's messages are ignored and 0.2 ignores these), listed in `/skola` with a whisper button. 0.2's saved cooldowns are kept and its recipe lists dropped.
+- Limitation: cooldowns only update when the owner opens the profession window.
 
 ### Eniro: where guild members are (built, v0.1)
 - `/eniro` (or `/hitta`): online members from the guild roster with class color, level (colored by difficulty) and zone. Same zone first, then nearest, then closest in level. Filters: all, my zone, my level ±5. Whisper and invite buttons.
