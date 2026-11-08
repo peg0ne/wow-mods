@@ -57,6 +57,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Dodsannonser | 0.1 | Built, not yet tested in game |
 | Handlaggaren | 0.1 | Built, not yet tested in game |
 | SCB | 0.1 | Built, not yet tested in game |
+| Kolapp | 0.1 | Built, not yet tested in game |
 
 ## Accepted ideas
 
@@ -123,6 +124,13 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 - With several rewards it marks the one with the highest sell price with a coin icon. `/hl belöning` picks it automatically and prints what was chosen.
 - `/hl dela` shares newly accepted quests with your group (off by default). `/hl prat` chooses an NPC's only chat option (off by default, because some single options set your hearthstone or open a vendor).
 - `/hl` shows the settings, `/hl av` / `/hl på` turns the whole addon off or on.
+
+### Kölapp: quest chain position (built, v0.1)
+- Shows where a quest sits in its chain, like a queue ticket: the quest window title gets "(2/4)" when the quest is offered, in progress, at the reward screen and in the quest log's details. Hovering a quest in the quest log shows "Questkedja: del 2 av 4" and the next quests.
+- Chat says "nummer 2 av 4 i kedjan: …" when you accept a chain quest (useful with Handläggaren, which accepts without showing the window) and "nästa i kedjan: … (3/4)" or "kedjan är klar" when you hand one in. `/kolapp tyst` turns the chat lines off.
+- The client has no quest chain data, so `Kolapp/Data.lua` (about 2,700 quests) is generated from Questie's Classic database, fixes and blacklist (Questie v11.38.0, the last tag with that database; GPLv3) by `tools/kolapp_data.py`. Re-run it to refresh the data.
+- Number = longest run of earlier quests + 1; total = number + longest run of later quests. Quests your race or class can't take are dropped, so class-quest branches only count for that class. Hub quests that open several branches count the longest one.
+- Ideas for later: numbers in the NPC's quest list (gossip frame) and the quest tracker.
 
 ### Utmärkelser: homemade achievements (social)
 - This client has no achievements. Events trigger them: `PLAYER_LEVEL_UP`, looting an epic, profession reaching 300, `UPDATE_FACTION` (exalted), first mount, boss kills (`UNIT_DIED` in the combat log), a run without dying.
