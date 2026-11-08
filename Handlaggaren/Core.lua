@@ -6,7 +6,8 @@
 -- for most and lets you choose (or picks it, with /hl belöning). Gray
 -- (trivial) quests are left alone unless /hl grå. Choosing an NPC's only
 -- chat option is off by default (/hl prat): some single options do things
--- (set your home, open a vendor).
+-- (set your home, open a vendor). Quests a party member shares are left
+-- for you to accept or decline unless /hl delade.
 --
 -- Written for Forever's retail-based client (C_GossipInfo), with the older
 -- quest greeting functions for NPCs that use that window instead.
@@ -17,6 +18,7 @@ local defaults = {
 	share = false,    -- share newly accepted quests with the group
 	gossip = false,   -- choose an NPC's only chat option
 	trivial = false,  -- also take gray quests
+	shared = false,   -- accept quests a party member shares
 }
 
 local db
@@ -112,6 +114,8 @@ local function OnDetail()
 	-- Quests the game accepts by itself need nothing from us. (Escort
 	-- quests ask through QUEST_ACCEPT_CONFIRM, which is left to you.)
 	if QuestGetAutoAccept and QuestGetAutoAccept() then return end
+	-- A shared quest comes from a player, not an NPC.
+	if not db.shared and UnitExists("questnpc") and UnitIsPlayer("questnpc") then return end
 	AcceptQuest()
 end
 
@@ -221,6 +225,7 @@ local SETTINGS = {
 	{ "share", "dela", "dela nya uppdrag med gruppen" },
 	{ "gossip", "prat", "välj NPC:ns enda pratval" },
 	{ "trivial", "grå", "ta gråa uppdrag" },
+	{ "shared", "delade", "ta uppdrag som gruppen delar" },
 }
 
 local function Status()
@@ -241,10 +246,10 @@ SlashCmdList.HANDLAGGAREN = function(msg)
 		Status()
 		return
 	end
-	local aliases = { ["belöning"] = "pickBest", beloning = "pickBest", dela = "share", prat = "gossip", ["grå"] = "trivial", gra = "trivial" }
+	local aliases = { ["belöning"] = "pickBest", beloning = "pickBest", dela = "share", prat = "gossip", ["grå"] = "trivial", gra = "trivial", delade = "shared" }
 	local key = aliases[cmd]
 	if not key then
-		Print("/hl visar inställningarna. /hl av | på, /hl belöning, /hl dela, /hl prat, /hl grå slår av eller på.")
+		Print("/hl visar inställningarna. /hl av | på, /hl belöning, /hl dela, /hl prat, /hl grå, /hl delade slår av eller på.")
 		return
 	end
 	db[key] = not db[key]

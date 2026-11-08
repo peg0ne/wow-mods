@@ -10,7 +10,7 @@ Guild addons are named after Swedish public institutions and companies.
 | Arbetsformedlingen | Shared quests (`/uppdrag`) and the Platsbanken group-finder board (`/platsbanken`) |
 | Skatteverket | Guild tax on looted gold, vendor and auction sales; standings in `/skatt` |
 | Swedbank | Guild loans; only the guild leader sees applications |
-| Gildepanel | The Addons window (`/gpanel`): opens the other addons' windows and toggles their automatic settings; warns 6 hours before your Skatteverket standing drops. Its panel and minimap button were retired in 2.0, because Skatteverket 0.22 has its own (`/skatt` with a Swedbank tab, and a minimap button) |
+| Gildepanel | A compact bar (`/gpanel`) that drops open on hover into a panel: your Skatteverket standing and tax, the favourites, who is online, your Swedbank loans. The Addons window (`/gpanel addons`) opens the other addons' windows and toggles their automatic settings; warns 6 hours before your standing drops |
 | QuestLogSort | Puts completed quests last in the quest log and tracker; sorts the tracker by level |
 
 Guild addons share data through `C_ChatInfo.SendAddonMessage` on the GUILD channel and store it in SavedVariables.
@@ -55,7 +55,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Rattsmedicinalverket | 0.1 | Works in game (killer, level, ability, position from the Death Recap) |
 | Polisen | 0.1 | Loads without errors; reports need a death to a hostile player |
 | Dodsannonser | 0.1 | Built, not yet tested in game |
-| Handlaggaren | 0.1 | Built, not yet tested in game |
+| Handlaggaren | 0.2 | Built, not yet tested in game |
 | SCB | 0.1 | Built, not yet tested in game |
 | Kolapp | 0.2 | Works in game (quest tracker numbers) |
 
@@ -115,9 +115,10 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 - Turn the whole icon red when out of range and blue when out of mana (hook the action button update, `IsActionInRange` / `IsUsableAction`).
 - Only visual changes. Don't move secure bars in combat.
 
-### Handläggaren: quest automation (built, v0.1)
+### Handläggaren: quest automation (built, v0.2)
 - At a quest giver it hands in finished quests first, then picks up new ones (through `C_GossipInfo`, or the older quest greeting window), accepts them and completes them. Holding Shift when the window opens skips that conversation.
 - Never hands in a quest that costs gold. Gray quests are skipped unless `/hl grå`.
+- Quests a party member shares are left for you to accept or decline unless `/hl delade` (or the checkbox in `/gpanel addons`).
 - With several rewards it marks the one with the highest sell price with a coin icon. `/hl belöning` picks it automatically and prints what was chosen.
 - `/hl dela` shares newly accepted quests with your group (off by default). `/hl prat` chooses an NPC's only chat option (off by default, because some single options set your hearthstone or open a vendor).
 - `/hl` shows the settings, `/hl av` / `/hl på` turns the whole addon off or on.
