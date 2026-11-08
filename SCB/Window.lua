@@ -1,4 +1,4 @@
--- SCB, the /scb window in the same dialog style as /uppdrag: one row per
+-- SCB, the /scb window, in the style of Skatteverket's panel: one row per
 -- member with figures, the guild's totals, and a few facts. Click a column
 -- heading to sort by it (again to reverse).
 
@@ -62,37 +62,114 @@ local function Sort(people)
 	end)
 end
 
-local function Build()
-	frame = CreateFrame("Frame", "SCBFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-	frame:SetSize(WIDTH, 590)   -- room for up to 8 lines of facts
-	frame:SetPoint("CENTER")
-	frame:SetFrameStrata("DIALOG")
-	frame:SetClampedToScreen(true)
-	frame:SetBackdrop({
+-- The look of Skatteverket's panel: the game's portrait window (like the
+-- Character window) with the guild's lightning bolt from Skatteverket's
+-- art, the title on the title bar, a recessed inset and tabs along the
+-- bottom edge. Falls back to the old dialog look on a client without the
+-- template, as Skatteverket does.
+local function HasTemplate(name)
+	if C_XMLUtil and C_XMLUtil.GetTemplateInfo then return C_XMLUtil.GetTemplateInfo(name) ~= nil end
+	return true
+end
+
+local function Panel(name, titleText)
+	local ok, f = false, nil
+	if HasTemplate("ButtonFrameTemplate") then ok, f = pcall(CreateFrame, "Frame", name, UIParent, "ButtonFrameTemplate") end
+	if ok and f then
+		local bolt = C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("Skatteverket")
+		local art = bolt and "Interface\\AddOns\\Skatteverket\\Media\\Bolt" or "Interface\\Icons\\Spell_Nature_Lightning"
+		local portrait = f.portrait or f.Portrait or (f.PortraitContainer and f.PortraitContainer.portrait)
+			or _G[name .. "Portrait"]
+		if f.SetPortraitToAsset then
+			f:SetPortraitToAsset(art)
+		elseif portrait then
+			portrait:SetTexture(art)
+		end
+		if portrait then portrait:Show() end
+		local title = f.TitleText or (f.TitleContainer and f.TitleContainer.TitleText)
+		if title then title:SetText(titleText) end
+		return f, true
+	end
+	f = CreateFrame("Frame", name, UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+	f:SetBackdrop({
 		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
 		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
 		tile = true, tileSize = 32, edgeSize = 32,
 		insets = { left = 11, right = 12, top = 12, bottom = 11 },
 	})
+	local header = f:CreateTexture(nil, "ARTWORK")
+	header:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header")
+	header:SetSize(320, 64)
+	header:SetPoint("TOP", 0, 12)
+	local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	title:SetPoint("TOP", header, "TOP", 0, -14)
+	title:SetText(titleText)
+	local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+	close:SetPoint("TOPRIGHT", -6, -6)
+	return f, false
+end
+
+-- A tab under the window, as on the Character window; the first at the
+-- left edge, the rest after it.
+local function Tab(f, i, label, onClick)
+	local name = f:GetName() .. "Tab" .. i
+	local b
+	for _, template in ipairs({ "CharacterFrameTabButtonTemplate", "PanelTabButtonTemplate" }) do
+		if HasTemplate(template) then
+			local ok, t = pcall(CreateFrame, "Button", name, f, template)
+			if ok and t then
+				b = t
+				b.isTab = true
+				break
+			end
+		end
+	end
+	if not b then
+		b = CreateFrame("Button", name, f, "UIPanelButtonTemplate")
+		b:SetSize(120, 22)
+	end
+	b:SetID(i)
+	b:SetText(label)
+	if b.isTab and PanelTemplates_TabResize then pcall(PanelTemplates_TabResize, b, 0) end
+	b:SetScript("OnClick", function()
+		onClick()
+		if PlaySound and SOUNDKIT then PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB) end
+	end)
+	if i == 1 then
+		b:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 12, 2)
+	else
+		b:SetPoint("LEFT", _G[f:GetName() .. "Tab" .. (i - 1)], "RIGHT", b.isTab and -15 or 4, 0)
+	end
+	return b
+end
+
+local function SelectTab(tab, on)
+	if tab.isTab and PanelTemplates_SelectTab and PanelTemplates_DeselectTab then
+		if on then PanelTemplates_SelectTab(tab) else PanelTemplates_DeselectTab(tab) end
+	elseif on then
+		tab:Disable()
+	else
+		tab:Enable()
+	end
+end
+
+local function Build()
+	local classic
+	frame, classic = Panel("SCBFrame", "Statistiska centralbyrån")
+	frame:SetSize(WIDTH, 590)   -- room for up to 8 lines of facts
+	frame:SetPoint("CENTER")
+	frame:SetFrameStrata("DIALOG")
+	frame:SetClampedToScreen(true)
 	frame:SetMovable(true)
 	frame:EnableMouse(true)
 	frame:RegisterForDrag("LeftButton")
 	frame:SetScript("OnDragStart", frame.StartMoving)
 	frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
 	tinsert(UISpecialFrames, "SCBFrame")
+	-- Below the portrait and title bar; buttons in the strip under the inset.
+	local dy, bottom, left = classic and -12 or 0, classic and 4 or 18, classic and 66 or 24
 
-	local header = frame:CreateTexture(nil, "ARTWORK")
-	header:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header")
-	header:SetSize(320, 64)
-	header:SetPoint("TOP", 0, 12)
-	local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	title:SetPoint("TOP", header, "TOP", 0, -14)
-	title:SetText("Statistiska centralbyrån")
-
-	local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", -6, -6)
-
-	frame.heading = Text(frame, "GameFontNormal", "TOPLEFT", 24, -34)
+	frame.heading = Text(frame, "GameFontNormal", "TOPLEFT", left, -34)
 	frame.heading:SetText("Gillet i siffror")
 
 	-- Clickable column headings.
@@ -101,7 +178,7 @@ local function Build()
 	for _, col in ipairs(COLUMNS) do
 		local h = CreateFrame("Button", nil, frame)
 		h:SetSize(col.width, 16)
-		h:SetPoint("TOPLEFT", x, -54)
+		h:SetPoint("TOPLEFT", x, -54 + dy)
 		h.text = Text(h, "GameFontNormalSmall", "LEFT", 0, 0)
 		h:SetScript("OnClick", function()
 			if sortKey == col.key then sortDown = not sortDown else sortKey, sortDown = col.key, col.key ~= "name" end
@@ -115,7 +192,7 @@ local function Build()
 	for i = 1, ROWS + 1 do
 		local row = CreateFrame("Frame", nil, frame)
 		row:SetSize(WIDTH - 40, ROW_H)
-		row:SetPoint("TOPLEFT", 20, -70 - (i - 1) * ROW_H)
+		row:SetPoint("TOPLEFT", 20, -70 + dy - (i - 1) * ROW_H)
 		row.cells = {}
 		local cx = 4
 		for c, col in ipairs(COLUMNS) do
@@ -128,19 +205,17 @@ local function Build()
 		rows[i] = row
 	end
 	-- The last row is the guild total, set apart.
-	rows[ROWS + 1]:SetPoint("TOPLEFT", 20, -74 - ROWS * ROW_H)
+	rows[ROWS + 1]:SetPoint("TOPLEFT", 20, -74 + dy - ROWS * ROW_H)
 
-	frame.facts = Text(frame, "GameFontHighlightSmall", "TOPLEFT", 24, -110 - ROWS * ROW_H)
+	frame.facts = Text(frame, "GameFontHighlightSmall", "TOPLEFT", 24, -110 + dy - ROWS * ROW_H)
 	frame.facts:SetWidth(WIDTH - 48)
 	frame.facts:SetSpacing(4)
 
-	frame.count = Text(frame, "GameFontDisableSmall", "BOTTOMLEFT", 24, 48)
+	frame.count = Text(frame, "GameFontDisableSmall", "BOTTOMLEFT", 24, bottom + 30)
 	frame.count:SetWidth(WIDTH - 48)
 
 	local refresh = Button(frame, "Uppdatera", 100, function() ns.Ask() ns.RefreshWindow() end)
-	refresh:SetPoint("BOTTOMLEFT", 24, 18)
-	local closeButton = Button(frame, "Stäng", 100, function() frame:Hide() end)
-	closeButton:SetPoint("BOTTOMRIGHT", -24, 18)
+	refresh:SetPoint("BOTTOMLEFT", 24, bottom)
 
 	frame:EnableMouseWheel(true)
 	frame:SetScript("OnMouseWheel", function(_, delta)

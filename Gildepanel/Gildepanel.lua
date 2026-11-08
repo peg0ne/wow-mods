@@ -186,20 +186,104 @@ local function RefreshHub()
 	end
 end
 
+-- The look of Skatteverket's panel: the game's portrait window (like the
+-- Character window) with the guild's lightning bolt from Skatteverket's
+-- art, the title on the title bar, a recessed inset and tabs along the
+-- bottom edge. Falls back to the old dialog look on a client without the
+-- template, as Skatteverket does.
+local function HasTemplate(name)
+	if C_XMLUtil and C_XMLUtil.GetTemplateInfo then return C_XMLUtil.GetTemplateInfo(name) ~= nil end
+	return true
+end
+
+local function Panel(name, titleText)
+	local ok, f = false, nil
+	if HasTemplate("ButtonFrameTemplate") then ok, f = pcall(CreateFrame, "Frame", name, UIParent, "ButtonFrameTemplate") end
+	if ok and f then
+		local bolt = C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("Skatteverket")
+		local art = bolt and "Interface\\AddOns\\Skatteverket\\Media\\Bolt" or "Interface\\Icons\\Spell_Nature_Lightning"
+		local portrait = f.portrait or f.Portrait or (f.PortraitContainer and f.PortraitContainer.portrait)
+			or _G[name .. "Portrait"]
+		if f.SetPortraitToAsset then
+			f:SetPortraitToAsset(art)
+		elseif portrait then
+			portrait:SetTexture(art)
+		end
+		if portrait then portrait:Show() end
+		local title = f.TitleText or (f.TitleContainer and f.TitleContainer.TitleText)
+		if title then title:SetText(titleText) end
+		return f, true
+	end
+	f = CreateFrame("Frame", name, UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+	f:SetBackdrop({
+		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+		tile = true, tileSize = 32, edgeSize = 32,
+		insets = { left = 11, right = 12, top = 12, bottom = 11 },
+	})
+	local header = f:CreateTexture(nil, "ARTWORK")
+	header:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header")
+	header:SetSize(320, 64)
+	header:SetPoint("TOP", 0, 12)
+	local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	title:SetPoint("TOP", header, "TOP", 0, -14)
+	title:SetText(titleText)
+	local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+	close:SetPoint("TOPRIGHT", -6, -6)
+	return f, false
+end
+
+-- A tab under the window, as on the Character window; the first at the
+-- left edge, the rest after it.
+local function Tab(f, i, label, onClick)
+	local name = f:GetName() .. "Tab" .. i
+	local b
+	for _, template in ipairs({ "CharacterFrameTabButtonTemplate", "PanelTabButtonTemplate" }) do
+		if HasTemplate(template) then
+			local ok, t = pcall(CreateFrame, "Button", name, f, template)
+			if ok and t then
+				b = t
+				b.isTab = true
+				break
+			end
+		end
+	end
+	if not b then
+		b = CreateFrame("Button", name, f, "UIPanelButtonTemplate")
+		b:SetSize(120, 22)
+	end
+	b:SetID(i)
+	b:SetText(label)
+	if b.isTab and PanelTemplates_TabResize then pcall(PanelTemplates_TabResize, b, 0) end
+	b:SetScript("OnClick", function()
+		onClick()
+		if PlaySound and SOUNDKIT then PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB) end
+	end)
+	if i == 1 then
+		b:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 12, 2)
+	else
+		b:SetPoint("LEFT", _G[f:GetName() .. "Tab" .. (i - 1)], "RIGHT", b.isTab and -15 or 4, 0)
+	end
+	return b
+end
+
+local function SelectTab(tab, on)
+	if tab.isTab and PanelTemplates_SelectTab and PanelTemplates_DeselectTab then
+		if on then PanelTemplates_SelectTab(tab) else PanelTemplates_DeselectTab(tab) end
+	elseif on then
+		tab:Disable()
+	else
+		tab:Enable()
+	end
+end
+
 local function BuildHub()
 	local HW = 320
-	hub = CreateFrame("Frame", "GildepanelHub", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+	local classic
+	hub, classic = Panel("GildepanelHub", GUILD)
 	hub:SetWidth(HW)
 	hub:SetFrameStrata("DIALOG")
 	hub:SetClampedToScreen(true)
-	hub:SetBackdrop({
-		bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-		tile = true, tileSize = 16, edgeSize = 16,
-		insets = { left = 4, right = 4, top = 4, bottom = 4 },
-	})
-	hub:SetBackdropColor(0.05, 0.05, 0.08, 0.95)
-	hub:SetBackdropBorderColor(0.6, 0.5, 0.2, 1)
 	hub:SetMovable(true)
 	hub:EnableMouse(true)
 	hub:RegisterForDrag("LeftButton")
@@ -220,15 +304,16 @@ local function BuildHub()
 	end
 	table.insert(UISpecialFrames, "GildepanelHub")
 
-	Text(hub, "GameFontNormalLarge", "TOPLEFT", PAD, -12):SetText(GUILD .. ": addons")
-	local close = CreateFrame("Button", nil, hub, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", -2, -2)
+	-- Beside the portrait, as Skatteverket's panel has its bank line; the
+	-- rest starts below the portrait.
+	Text(hub, "GameFontNormal", "TOPLEFT", classic and 66 or PAD, -34):SetText("Addons")
+	local top = classic and -66 or -34
 
 	-- Windows, two buttons a row.
-	Section(hub, "Fönster", -34)
+	Section(hub, "Fönster", top)
 	hub.windows = {}
 	local bw = (HW - 2 * PAD - 8) / 2
-	local y = -58
+	local y = top - 24
 	for i, w in ipairs(WINDOWS) do
 		local b = Button(hub, w[2], bw, function() RunSlash(w[3], w[4] or "", w[2]) end)
 		b.addon, b.key = w[1], w[3]
@@ -264,7 +349,7 @@ local function BuildHub()
 		y = y - 6
 		table.insert(hub.groups, row)
 	end
-	hub:SetHeight(-y + 8)
+	hub:SetHeight(-y + (classic and 28 or 8))
 
 	-- Slash commands can change a setting while the window is open.
 	hub:SetScript("OnShow", RefreshHub)

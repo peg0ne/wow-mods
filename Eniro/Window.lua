@@ -1,4 +1,4 @@
--- Eniro, the /eniro window in the same dialog style as /uppdrag: online
+-- Eniro, the /eniro window, in the style of Skatteverket's panel: online
 -- guild members, same zone first, then nearest and closest in level.
 -- Filters: everyone, my zone, my level (±5). Click a row to select it,
 -- then whisper or invite. The box at the bottom turns position sharing on.
@@ -54,49 +54,126 @@ local function SetFilter(filter)
 	ns.RefreshWindow()
 end
 
-local function Build()
-	frame = CreateFrame("Frame", "EniroFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-	frame:SetSize(WIDTH, 500)
-	frame:SetPoint("CENTER")
-	frame:SetFrameStrata("DIALOG")
-	frame:SetClampedToScreen(true)
-	frame:SetBackdrop({
+-- The look of Skatteverket's panel: the game's portrait window (like the
+-- Character window) with the guild's lightning bolt from Skatteverket's
+-- art, the title on the title bar, a recessed inset and tabs along the
+-- bottom edge. Falls back to the old dialog look on a client without the
+-- template, as Skatteverket does.
+local function HasTemplate(name)
+	if C_XMLUtil and C_XMLUtil.GetTemplateInfo then return C_XMLUtil.GetTemplateInfo(name) ~= nil end
+	return true
+end
+
+local function Panel(name, titleText)
+	local ok, f = false, nil
+	if HasTemplate("ButtonFrameTemplate") then ok, f = pcall(CreateFrame, "Frame", name, UIParent, "ButtonFrameTemplate") end
+	if ok and f then
+		local bolt = C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("Skatteverket")
+		local art = bolt and "Interface\\AddOns\\Skatteverket\\Media\\Bolt" or "Interface\\Icons\\Spell_Nature_Lightning"
+		local portrait = f.portrait or f.Portrait or (f.PortraitContainer and f.PortraitContainer.portrait)
+			or _G[name .. "Portrait"]
+		if f.SetPortraitToAsset then
+			f:SetPortraitToAsset(art)
+		elseif portrait then
+			portrait:SetTexture(art)
+		end
+		if portrait then portrait:Show() end
+		local title = f.TitleText or (f.TitleContainer and f.TitleContainer.TitleText)
+		if title then title:SetText(titleText) end
+		return f, true
+	end
+	f = CreateFrame("Frame", name, UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+	f:SetBackdrop({
 		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
 		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
 		tile = true, tileSize = 32, edgeSize = 32,
 		insets = { left = 11, right = 12, top = 12, bottom = 11 },
 	})
+	local header = f:CreateTexture(nil, "ARTWORK")
+	header:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header")
+	header:SetSize(320, 64)
+	header:SetPoint("TOP", 0, 12)
+	local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	title:SetPoint("TOP", header, "TOP", 0, -14)
+	title:SetText(titleText)
+	local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+	close:SetPoint("TOPRIGHT", -6, -6)
+	return f, false
+end
+
+-- A tab under the window, as on the Character window; the first at the
+-- left edge, the rest after it.
+local function Tab(f, i, label, onClick)
+	local name = f:GetName() .. "Tab" .. i
+	local b
+	for _, template in ipairs({ "CharacterFrameTabButtonTemplate", "PanelTabButtonTemplate" }) do
+		if HasTemplate(template) then
+			local ok, t = pcall(CreateFrame, "Button", name, f, template)
+			if ok and t then
+				b = t
+				b.isTab = true
+				break
+			end
+		end
+	end
+	if not b then
+		b = CreateFrame("Button", name, f, "UIPanelButtonTemplate")
+		b:SetSize(120, 22)
+	end
+	b:SetID(i)
+	b:SetText(label)
+	if b.isTab and PanelTemplates_TabResize then pcall(PanelTemplates_TabResize, b, 0) end
+	b:SetScript("OnClick", function()
+		onClick()
+		if PlaySound and SOUNDKIT then PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB) end
+	end)
+	if i == 1 then
+		b:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 12, 2)
+	else
+		b:SetPoint("LEFT", _G[f:GetName() .. "Tab" .. (i - 1)], "RIGHT", b.isTab and -15 or 4, 0)
+	end
+	return b
+end
+
+local function SelectTab(tab, on)
+	if tab.isTab and PanelTemplates_SelectTab and PanelTemplates_DeselectTab then
+		if on then PanelTemplates_SelectTab(tab) else PanelTemplates_DeselectTab(tab) end
+	elseif on then
+		tab:Disable()
+	else
+		tab:Enable()
+	end
+end
+
+local function Build()
+	local classic
+	frame, classic = Panel("EniroFrame", "Eniro")
+	frame:SetSize(WIDTH, 500)
+	frame:SetPoint("CENTER")
+	frame:SetFrameStrata("DIALOG")
+	frame:SetClampedToScreen(true)
 	frame:SetMovable(true)
 	frame:EnableMouse(true)
 	frame:RegisterForDrag("LeftButton")
 	frame:SetScript("OnDragStart", frame.StartMoving)
 	frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
 	tinsert(UISpecialFrames, "EniroFrame")
+	-- Below the portrait and title bar; buttons in the strip under the inset.
+	local dy, bottom, left = classic and -12 or 0, classic and 4 or 18, classic and 66 or 24
 
-	local header = frame:CreateTexture(nil, "ARTWORK")
-	header:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header")
-	header:SetSize(260, 64)
-	header:SetPoint("TOP", 0, 12)
-	local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	title:SetPoint("TOP", header, "TOP", 0, -14)
-	title:SetText("Eniro")
-
-	local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", -6, -6)
-
-	frame.heading = Text(frame, "GameFontNormal", "TOPLEFT", 24, -34)
+	frame.heading = Text(frame, "GameFontNormal", "TOPLEFT", left, -34)
 	frame.heading:SetText("Var är gillet?")
 
 	local x = 24
 	for c = 1, #COLS do
-		Text(frame, "GameFontNormalSmall", "TOPLEFT", x, -56):SetText(HEADER[c])
+		Text(frame, "GameFontNormalSmall", "TOPLEFT", x, -56 + dy):SetText(HEADER[c])
 		x = x + COLS[c]
 	end
 
 	for i = 1, ROWS do
 		local row = CreateFrame("Button", nil, frame)
 		row:SetSize(WIDTH - 40, ROW_H)
-		row:SetPoint("TOPLEFT", 20, -70 - (i - 1) * ROW_H)
+		row:SetPoint("TOPLEFT", 20, -70 + dy - (i - 1) * ROW_H)
 		row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
 		row.cells = {}
 		local cx = 4
@@ -116,11 +193,11 @@ local function Build()
 		rows[i] = row
 	end
 
-	frame.count = Text(frame, "GameFontDisableSmall", "TOPLEFT", 24, -366)
+	frame.count = Text(frame, "GameFontDisableSmall", "TOPLEFT", 24, -366 + dy)
 	frame.count:SetWidth(WIDTH - 48)
 
 	local act = CreateFrame("Frame", nil, frame)
-	act:SetPoint("TOPLEFT", 24, -396)
+	act:SetPoint("TOPLEFT", 24, -396 + dy)
 	act:SetSize(WIDTH - 48, 24)
 	act.label = Text(act, "GameFontHighlightSmall", "LEFT", 0, 0)
 	act.label:SetWidth(330)
@@ -137,14 +214,14 @@ local function Build()
 
 	local share = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
 	share:SetSize(24, 24)
-	share:SetPoint("TOPLEFT", 20, -424)
+	share:SetPoint("TOPLEFT", 20, -424 + dy)
 	share:SetScript("OnClick", function(self) ns.SetSharing(self:GetChecked()) end)
 	frame.share = share
 	Text(frame, "GameFontHighlightSmall", "LEFT", share, "RIGHT", 4, 0)
 		:SetText("Dela min position med gillet (syns på världskartan för medlemmar med Eniro)")
 
 	local refresh = Button(frame, "Uppdatera", 100, function() ns.Ask() ns.RefreshWindow() end)
-	refresh:SetPoint("BOTTOMLEFT", 24, 18)
+	refresh:SetPoint("BOTTOMLEFT", 24, bottom)
 	frame.filters = {}
 	local tx = refresh
 	for _, spec in ipairs(FILTERS) do
@@ -153,8 +230,6 @@ local function Build()
 		frame.filters[spec[1]] = b
 		tx = b
 	end
-	local closeButton = Button(frame, "Stäng", 100, function() frame:Hide() end)
-	closeButton:SetPoint("BOTTOMRIGHT", -24, 18)
 
 	frame:EnableMouseWheel(true)
 	frame:SetScript("OnMouseWheel", function(_, delta)

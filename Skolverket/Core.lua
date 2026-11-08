@@ -195,9 +195,22 @@ local function ScanTradeSkill()
 	end
 	local base = T.GetBaseProfessionInfo and T.GetBaseProfessionInfo()
 	local prof = base and base.professionName
+	local all = T.GetAllRecipeIDs() or {}
+	if (not prof or prof == "" or prof == "UNKNOWN") and all[1] then
+		-- Some clients leave the base info empty; ask a recipe instead.
+		if T.GetProfessionInfoByRecipeID then
+			local ok, info = pcall(T.GetProfessionInfoByRecipeID, all[1])
+			if ok and info then prof = info.parentProfessionName or info.professionName end
+		end
+		if (not prof or prof == "") and T.GetTradeSkillLineForRecipe then
+			-- Returns tradeSkillID, skillLineName, parentTradeSkillID.
+			local ok, _, name = pcall(T.GetTradeSkillLineForRecipe, all[1])
+			if ok then prof = name end
+		end
+	end
 	if not prof or prof == "" or prof == "UNKNOWN" then return end
 	local found, cds = {}, {}
-	for _, recipeID in ipairs(T.GetAllRecipeIDs() or {}) do
+	for _, recipeID in ipairs(all) do
 		local info = T.GetRecipeInfo(recipeID)
 		if info and info.learned then
 			local key

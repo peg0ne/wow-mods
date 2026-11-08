@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Gildepanel
 ## Notes: The Addons window for THÖNDERSTÖRM (/gpanel): opens the other guild addons' windows and toggles their automatic settings. Also warns in chat 6 hours before your Skatteverket standing drops. Your tax itself is in Skatteverket's /skatt.
-## Version: 2.0
+## Version: 2.1
 ## OptionalDeps: Skatteverket
 ## SavedVariables: GildepanelDB
 Gildepanel.lua

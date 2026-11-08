@@ -215,8 +215,23 @@ local function Newest()
 	return newest
 end
 
+-- Cut text to at most max bytes without splitting a multi-byte letter
+-- (å, ä, ö are two bytes each); a half letter breaks the message.
+local function Cut(text, max)
+	if #text <= max then return text end
+	text = text:sub(1, max)
+	local i = #text
+	while i > 0 and text:byte(i) >= 128 and text:byte(i) < 192 do i = i - 1 end
+	local lead = text:byte(i)
+	if lead and lead >= 192 then
+		local need = lead >= 240 and 4 or (lead >= 224 and 3 or 2)
+		if #text - i + 1 < need then text = text:sub(1, i - 1) end
+	end
+	return text
+end
+
 local function Clean(text)
-	return tostring(text or ""):gsub("[;|]", ","):sub(1, 40)
+	return Cut((tostring(text or ""):gsub("[;|]", ",")), 40)
 end
 
 local function SendIncident(inc)

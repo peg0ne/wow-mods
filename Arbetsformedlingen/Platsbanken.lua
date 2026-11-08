@@ -28,9 +28,24 @@ ns.listings = {}    -- poster -> { id, tank, heal, dps, quest, level, text, seen
 ns.myListing = nil  -- { id, tank, heal, dps, quest, text, posted, applicants = { name -> { role, at, invited } } }
 ns.applied = {}     -- poster -> { id, role, invited }
 
+-- Cut text to at most max bytes without splitting a multi-byte letter
+-- (å, ä, ö are two bytes each); a half letter breaks the message.
+local function Cut(text, max)
+	if #text <= max then return text end
+	text = text:sub(1, max)
+	local i = #text
+	while i > 0 and text:byte(i) >= 128 and text:byte(i) < 192 do i = i - 1 end
+	local lead = text:byte(i)
+	if lead and lead >= 192 then
+		local need = lead >= 240 and 4 or (lead >= 224 and 3 or 2)
+		if #text - i + 1 < need then text = text:sub(1, i - 1) end
+	end
+	return text
+end
+
 local function Clean(text, max)
 	text = tostring(text or ""):gsub("[;|\n]", " "):gsub("^%s+", ""):gsub("%s+$", "")
-	return text:sub(1, max)
+	return Cut(text, max)
 end
 
 local function Ding()

@@ -96,6 +96,8 @@ ns.Changed = Changed
 -- This character's map, x, y (0-1), or nil when unknown (in an instance).
 function ns.MyPosition()
 	if not C_Map or not C_Map.GetBestMapForUnit then return end
+	-- Dungeon maps can give a position too; never share one from inside.
+	if IsInInstance and IsInInstance() then return end
 	local map = C_Map.GetBestMapForUnit("player")
 	if not map then return end
 	local pos = C_Map.GetPlayerMapPosition(map, "player")

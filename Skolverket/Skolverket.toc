@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Skolverket
 ## Notes: Profession cooldowns for THÖNDERSTÖRM (/skola), and item tooltips naming the guild members who can craft the item (from Skatteverket's recipe lists). Recipes and professions themselves are in Skatteverket's /skatt yrken.
-## Version: 0.3
+## Version: 0.4
 ## OptionalDeps: Skatteverket
 ## SavedVariables: SkolverketDB
 ## SavedVariablesPerCharacter: SkolverketCharDB
