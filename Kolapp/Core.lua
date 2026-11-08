@@ -1,8 +1,9 @@
 -- Kölapp: where a quest sits in its quest chain, like a queue ticket.
 -- The quest window's title gets "(2/4)" (offered, in progress, rewards and
--- the quest log's details), the quest log's tooltip names the next quests,
--- and chat says the number when you accept a chain quest and what comes
--- next when you hand one in (/kolapp tyst turns the chat lines off).
+-- the quest log's details), and so does the quest tracker. The quest log's
+-- tooltip names the next quests, and chat says the number when you accept
+-- a chain quest and what comes next when you hand one in (/kolapp tyst
+-- turns the chat lines off).
 --
 -- The client has no quest chain data, so Data.lua carries the links from
 -- Questie's database (built by tools/kolapp_data.py). A quest's number is
@@ -156,6 +157,43 @@ local function AddTooltip(button)
 end
 
 ---------------------------------------------------------------------------
+-- Quest tracker. Its blocks set their title through a SetHeader method
+-- (newer trackers, one copy per block mixin) or the module's SetBlockHeader
+-- (older ones). After it runs we call it again with the label added, so the
+-- tracker measures the longer title itself before laying the block out.
+-- A block is only labelled when its title is the quest's title, so blocks
+-- for achievements or other things with the same ID are left alone.
+
+local hookedTables = {}
+
+local function TrackerLabel(block, text)
+	local id = block and block.id
+	if type(id) ~= "number" or type(text) ~= "string" or not quests[id] then return end
+	if text ~= Name(id) and text ~= quests[id][1] then return end
+	return Label(id)
+end
+
+local function HookTracker()
+	for name, value in pairs(_G) do
+		if type(value) == "table" and not hookedTables[value] and type(name) == "string" then
+			if name:find("BlockMixin") and type(rawget(value, "SetHeader")) == "function" then
+				hookedTables[value] = true
+				hooksecurefunc(value, "SetHeader", function(block, text)
+					local ok, label = pcall(TrackerLabel, block, text)
+					if ok and label then block:SetHeader(text .. " " .. label) end
+				end)
+			elseif name:find("TRACKER_MODULE") and type(rawget(value, "SetBlockHeader")) == "function" then
+				hookedTables[value] = true
+				hooksecurefunc(value, "SetBlockHeader", function(module, block, text)
+					local ok, label = pcall(TrackerLabel, block, text)
+					if ok and label then module:SetBlockHeader(block, text .. " " .. label) end
+				end)
+			end
+		end
+	end
+end
+
+---------------------------------------------------------------------------
 -- Chat.
 
 local function OnAccepted(...)
@@ -195,7 +233,9 @@ events:RegisterEvent("PLAYER_LOGIN")
 events:RegisterEvent("QUEST_ACCEPTED")
 events:RegisterEvent("QUEST_TURNED_IN")
 events:SetScript("OnEvent", function(_, event, ...)
-	if event == "ADDON_LOADED" and ... == "Kolapp" then
+	if event == "ADDON_LOADED" and ... == "Blizzard_ObjectiveTracker" then
+		HookTracker()
+	elseif event == "ADDON_LOADED" and ... == "Kolapp" then
 		KolappDB = KolappDB or {}
 		db = KolappDB
 		for k, v in pairs(defaults) do
@@ -203,12 +243,16 @@ events:SetScript("OnEvent", function(_, event, ...)
 		end
 	elseif event == "PLAYER_LOGIN" then
 		Hook()
+		HookTracker()
 	elseif event == "QUEST_ACCEPTED" and db then
 		OnAccepted(...)
 	elseif event == "QUEST_TURNED_IN" and db then
 		OnTurnedIn(...)
 	end
 end)
+
+-- The tracker may already be loaded; hook it before it makes any blocks.
+HookTracker()
 
 SLASH_KOLAPP1 = "/kolapp"
 SlashCmdList.KOLAPP = function(msg)

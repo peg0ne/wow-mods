@@ -126,11 +126,12 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 - `/hl` shows the settings, `/hl av` / `/hl på` turns the whole addon off or on.
 
 ### Kölapp: quest chain position (built, v0.1)
-- Shows where a quest sits in its chain, like a queue ticket: the quest window title gets "(2/4)" when the quest is offered, in progress, at the reward screen and in the quest log's details. Hovering a quest in the quest log shows "Questkedja: del 2 av 4" and the next quests.
+- Shows where a quest sits in its chain, like a queue ticket: the quest window title gets "(2/4)" when the quest is offered, in progress, at the reward screen, in the quest log's details and in the quest tracker. Hovering a quest in the quest log shows "Questkedja: del 2 av 4" and the next quests.
 - Chat says "nummer 2 av 4 i kedjan: …" when you accept a chain quest (useful with Handläggaren, which accepts without showing the window) and "nästa i kedjan: … (3/4)" or "kedjan är klar" when you hand one in. `/kolapp tyst` turns the chat lines off.
 - The client has no quest chain data, so `Kolapp/Data.lua` (about 2,700 quests) is generated from Questie's Classic database, fixes and blacklist (Questie v11.38.0, the last tag with that database; GPLv3) by `tools/kolapp_data.py`. Re-run it to refresh the data.
 - Number = longest run of earlier quests + 1; total = number + longest run of later quests. Quests your race or class can't take are dropped, so class-quest branches only count for that class. Hub quests that open several branches count the longest one.
-- Ideas for later: numbers in the NPC's quest list (gossip frame) and the quest tracker.
+- The tracker is labelled by hooking every `*BlockMixin:SetHeader` (and older trackers' `SetBlockHeader`) and setting the title again with the number, so the tracker measures the longer line itself. Only blocks whose title matches the quest's title are changed.
+- Ideas for later: numbers in the NPC's quest list (gossip frame).
 
 ### Utmärkelser: homemade achievements (social)
 - This client has no achievements. Events trigger them: `PLAYER_LEVEL_UP`, looting an epic, profession reaching 300, `UPDATE_FACTION` (exalted), first mount, boss kills (`UNIT_DIED` in the combat log), a run without dying.
