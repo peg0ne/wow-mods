@@ -43,6 +43,7 @@ local db
 local listeners = {}
 local levels, levelCount = {}, 0
 local lastRecap         -- the recap ID already used, so an old recap is never reused
+local dead              -- this death is already recorded; set until alive again
 
 -- The client may hand addons "secret" values that cannot be compared or
 -- printed; treat those as unknown.
@@ -283,6 +284,11 @@ local function Examine(r, hits)
 end
 
 local function OnDeath()
+	-- PLAYER_DEAD can fire more than once for one death (after a reload or
+	-- relog while dead, at spirit release). The recap is used up by then,
+	-- so a second record would be an "unknown cause" duplicate.
+	if dead then return end
+	dead = true
 	local stamp = time()
 	local victim = Me() or UnitName("player")
 	local map, x, y = Position()
@@ -332,6 +338,7 @@ local events = CreateFrame("Frame")
 -- Never COMBAT_LOG_EVENT_UNFILTERED: on Forever, registering for it gets the
 -- addon blocked.
 for _, event in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "CHAT_MSG_ADDON", "PLAYER_DEAD",
+	"PLAYER_ALIVE", "PLAYER_UNGHOST",
 	"PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "NAME_PLATE_UNIT_ADDED" }) do
 	pcall(events.RegisterEvent, events, event)
 end
@@ -348,10 +355,15 @@ events:SetScript("OnEvent", function(_, event, ...)
 	elseif event == "PLAYER_LOGIN" then
 		-- A recap left over from before this session must not be read as new.
 		lastRecap = RecapID()
+		-- Logged in dead or as a ghost: that death was recorded before.
+		dead = UnitIsDeadOrGhost("player") and true or nil
 		local register = C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix or RegisterAddonMessagePrefix
 		if register then register(ns.PREFIX) end
 	elseif event == "PLAYER_DEAD" then
 		OnDeath()
+	elseif event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST" then
+		-- PLAYER_ALIVE also fires on release, when you are a ghost.
+		if not UnitIsDeadOrGhost("player") then dead = nil end
 	elseif event == "CHAT_MSG_ADDON" then
 		OnAddonMessage(...)
 	elseif event == "PLAYER_TARGET_CHANGED" then

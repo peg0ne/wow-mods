@@ -739,7 +739,8 @@ local SETTINGS = {
 	} },
 	{ addon = "Dodsannonser", title = "Dödsannonser", db = "DodsannonserDB", items = {
 		{ key = "quiet", label = "Visa nya i chatten", invert = true },
-		{ key = "guildChat", label = "Skriv min egen i gillechatten", default = true },
+		{ key = "guildChat", label = "Skriv mina egna i gillechatten", default = true },
+		{ key = "noLevels", label = "Annonsera nya nivåer", invert = true },
 	} },
 	{ addon = "Polisen", title = "Polisen", db = "PolisenDB", items = {
 		{ key = "alarm", label = "Varning på skärmen och ljud", default = true },

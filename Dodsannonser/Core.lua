@@ -10,16 +10,26 @@
 --
 -- Wording is picked at random from the lists below, but the same death
 -- always gets the same wording on every computer (seeded by the death's id).
+--
+-- Level-ups get a notice too ("Familjenytt"). The death records don't cover
+-- them, so the one who levelled tells the guild: on PLAYER_LEVEL_UP they
+-- send "L;<name>;<level>;<classFile>" (prefix DODSANNONS) and, like an
+-- obituary, post the notice in guild chat 2 s later. Everyone with the
+-- addon writes the same notice from that message (seeded by name and
+-- level) and hides the guild chat copy. /dodsannons nivå turns them off.
 
 local _, ns = ...
 
 ns.GUILD = "THÖNDERSTÖRM"
 local SKULL = "|TInterface\\TargetingFrame\\UI-TargetingFrame-Skull:14|t"
+local STAR = "|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_1:14|t"
+local PREFIX = "DODSANNONS"   -- addon message prefix for level-ups
 local KEEP = 50
 
 local db
 local shown = {}   -- death ids already announced this session
 local ownCopy = {} -- guild chat lines we already show ourselves
+local heard = {}   -- ["Dödsannons:" or "Familjenytt:" .. name] = GetTime() we showed it
 
 -- Cut text to at most max bytes without splitting a multi-byte letter
 -- (å, ä, ö are two bytes each); a half letter breaks the message.
@@ -37,8 +47,8 @@ local function Cut(text, max)
 end
 
 -- The obituary as it goes out in guild chat (at most 255 bytes).
-local function GuildLine(text)
-	local line = "Dödsannons: " .. text
+local function GuildLine(text, heading)
+	local line = (heading or "Dödsannons") .. ": " .. text
 	if #line > 255 then line = Cut(line, 252) .. "..." end
 	return line
 end
@@ -183,6 +193,51 @@ local function Obituary(r)
 end
 
 ---------------------------------------------------------------------------
+-- Level-up wording. {v} name, {vd} name with class, {l} the new level.
+
+local LEVEL_OPENINGS = {
+	"{vd} fyller {l} i dag.",
+	"Grattis {vd}, som har nått nivå {l}!",
+	"{vd} har tagit steget upp till nivå {l}.",
+	"Hipp hipp hurra: {vd} är nu nivå {l}.",
+	"Gillet gratulerar {vd} på nivå {l}.",
+}
+
+-- An extra line on the levels that matter.
+local LEVEL_MILESTONES = {
+	[10] = "Nu börjar talangerna.",
+	[20] = "En tredjedel av vägen är avklarad.",
+	[30] = "Halvvägs dit.",
+	[40] = "Dags för ridlektioner.",
+	[50] = "Bara tio nivåer kvar.",
+}
+
+local LEVEL_CLOSINGS = {
+	"Grattis från hela " .. ns.GUILD .. ".",
+	"Uppvaktning undanbedes.",
+	"Tårta serveras vid närmaste värdshus.",
+	"Kom ihåg att skatten följer inkomsten.",
+	"Hurra!",
+}
+
+local MAX_LEVEL_LINES = {
+	"{vd} har nått nivå {l}, den högsta som finns. Nu börjar det riktiga arbetet. Ett stort grattis från hela " .. ns.GUILD .. "!",
+	"Hela " .. ns.GUILD .. " firar: {vd} har nått nivå {l}! Fanfarer, tårta och ledigt resten av dagen.",
+}
+
+local function LevelNotice(name, level, classFile)
+	local pick = Picker(name .. ":" .. level)
+	local class = ClassName(classFile)
+	local vars = { v = name, l = tostring(level), vd = class and string.format("%s (%s)", name, class) or name }
+	local maxLevel = (GetMaxPlayerLevel and GetMaxPlayerLevel()) or 60
+	if level >= maxLevel then return Fill(pick(MAX_LEVEL_LINES), vars) end
+	local parts = { Fill(pick(LEVEL_OPENINGS), vars) }
+	if LEVEL_MILESTONES[level] then table.insert(parts, LEVEL_MILESTONES[level]) end
+	table.insert(parts, pick(LEVEL_CLOSINGS))
+	return table.concat(parts, " ")
+end
+
+---------------------------------------------------------------------------
 
 local function OnDeath(r)
 	if not db or shown[r.id] or not InOurGuild() then return end
@@ -198,6 +253,7 @@ local function OnDeath(r)
 		end
 	end
 	ownCopy[GuildLine(text)] = true
+	heard["Dödsannons:" .. r.victim] = GetTime()
 	if r.me and db.guildChat and IsInGuild() then
 		-- Wait a little: Rättsmedicinalverket's record must reach the others
 		-- before this line does, so their filter knows to hide it.
@@ -209,15 +265,71 @@ local function OnDeath(r)
 	end
 end
 
+local levelShown = {}   -- "name:level" already announced this session
+
+local function ShowLevel(name, level, classFile)
+	local key = name .. ":" .. level
+	if levelShown[key] then return end
+	levelShown[key] = true
+	local text = LevelNotice(name, level, classFile)
+	ownCopy[GuildLine(text, "Familjenytt")] = true
+	heard["Familjenytt:" .. name] = GetTime()
+	if not db.quiet then
+		DEFAULT_CHAT_FRAME:AddMessage(STAR .. " |cffffe28a" .. text .. "|r")
+	end
+	return text
+end
+
+local function OnLevelUp(level)
+	if not db or db.noLevels or not InOurGuild() or not level or level < 2 then return end
+	local name = UnitName("player")
+	local _, classFile = UnitClass("player")
+	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
+		C_ChatInfo.SendAddonMessage(PREFIX, string.format("L;%s;%d;%s", name, level, classFile or ""), "GUILD")
+	end
+	local text = ShowLevel(name, level, classFile)
+	if text and db.guildChat then
+		-- Same wait as the obituary, so the others hide the copy.
+		C_Timer.After(2, function()
+			local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
+			if send and IsInGuild() then send(GuildLine(text, "Familjenytt"), "GUILD") end
+		end)
+	end
+end
+
+local function OnAddonMessage(prefix, msg, channel)
+	if prefix ~= PREFIX or channel ~= "GUILD" or not db or db.noLevels or not InOurGuild() then return end
+	if type(msg) ~= "string" or (issecretvalue and issecretvalue(msg)) then return end
+	local kind, name, level, classFile = strsplit(";", msg)
+	level = tonumber(level)
+	if kind ~= "L" or not name or name == "" or not level or name == UnitName("player") then return end
+	ShowLevel(name, level, classFile ~= "" and classFile or nil)
+end
+
 -- Members with the addon already have the notice in their own chat; hide
 -- the copy the victim posts in guild chat (it is there for members
 -- without the addon, and for the Discord bridge). With /dodsannons tyst
 -- the guild line is the only one, so it stays.
+--
+-- The line can differ from ours (the death count is each member's own
+-- count, and Rättsmedicinalverket shortens long fields on the way), so an
+-- exact match is not enough: also hide a "Dödsannons:"/"Familjenytt:" line
+-- from someone we showed a notice for in the last minute.
+local function Plain(v)
+	if type(v) ~= "string" or (issecretvalue and issecretvalue(v)) then return nil end
+	return v
+end
+
 if ChatFrame_AddMessageEventFilter then
-	ChatFrame_AddMessageEventFilter("CHAT_MSG_GUILD", function(_, _, msg)
-		if db and not db.quiet and type(msg) == "string" and not (issecretvalue and issecretvalue(msg)) and ownCopy[msg] then
-			return true
-		end
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_GUILD", function(_, _, msg, author)
+		msg, author = Plain(msg), Plain(author)
+		if not db or db.quiet or not msg then return end
+		if ownCopy[msg] then return true end
+		local heading = msg:match("^(Dödsannons):") or msg:match("^(Familjenytt):")
+		if not heading or not author then return end
+		author = Ambiguate and Ambiguate(author, "none") or author:gsub("%-.*", "")
+		local t = heard[heading .. ":" .. author]
+		if t and GetTime() - t < 60 then return true end
 	end)
 end
 
@@ -230,7 +342,22 @@ end
 
 local events = CreateFrame("Frame")
 events:RegisterEvent("ADDON_LOADED")
-events:SetScript("OnEvent", function(_, _, name)
+events:RegisterEvent("PLAYER_LOGIN")
+events:RegisterEvent("PLAYER_LEVEL_UP")
+events:RegisterEvent("CHAT_MSG_ADDON")
+events:SetScript("OnEvent", function(_, event, ...)
+	if event == "PLAYER_LOGIN" then
+		local register = C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix or RegisterAddonMessagePrefix
+		if register then register(PREFIX) end
+		return
+	elseif event == "PLAYER_LEVEL_UP" then
+		OnLevelUp(...)
+		return
+	elseif event == "CHAT_MSG_ADDON" then
+		OnAddonMessage(...)
+		return
+	end
+	local name = ...
 	if name ~= "Dodsannonser" then return end
 	DodsannonserDB = DodsannonserDB or {}
 	db = DodsannonserDB
@@ -251,12 +378,16 @@ SlashCmdList.DODSANNONSER = function(msg)
 	local cmd = strtrim(msg or ""):lower()
 	if cmd == "gillet" then
 		db.guildChat = not db.guildChat
-		Print(db.guildChat and "din egen dödsannons skrivs nu också i gillechatten (för medlemmar utan addonen)."
-			or "din dödsannons skrivs inte längre i gillechatten.")
+		Print(db.guildChat and "dina egna annonser (död och ny nivå) skrivs nu också i gillechatten (för medlemmar utan addonen)."
+			or "dina annonser skrivs inte längre i gillechatten.")
+	elseif cmd == "nivå" or cmd == "niva" then
+		db.noLevels = not db.noLevels
+		Print(db.noLevels and "nivåannonser är avstängda: du ser inga och skickar inga."
+			or "nivåannonser är på igen: gillet får veta när du går upp en nivå.")
 	elseif cmd == "tyst" then
 		db.quiet = not db.quiet
-		Print(db.quiet and "dödsannonser visas inte längre i chatten (de sparas ändå; /dodsannons visar dem)."
-			or "dödsannonser visas i chatten igen.")
+		Print(db.quiet and "annonser visas inte längre i chatten (dödsannonserna sparas ändå; /dodsannons visar dem)."
+			or "annonser visas i chatten igen.")
 	elseif cmd == "" then
 		if #db.recent == 0 then
 			Print("inga dödsannonser än.")
@@ -268,6 +399,6 @@ SlashCmdList.DODSANNONSER = function(msg)
 			DEFAULT_CHAT_FRAME:AddMessage(SKULL .. " |cff999999" .. Ago(n.time) .. ":|r " .. n.text)
 		end
 	else
-		Print("/dodsannons visar de senaste, /dodsannons tyst döljer nya i chatten, /dodsannons gillet skriver din egen i gillechatten.")
+		Print("/dodsannons visar de senaste, /dodsannons tyst döljer nya i chatten, /dodsannons gillet skriver dina egna i gillechatten, /dodsannons nivå stänger av nivåannonserna.")
 	end
 end

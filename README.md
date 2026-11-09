@@ -52,9 +52,9 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Atervinningscentralen | 0.1 | Works in game (sells grays, repairs) |
 | Skolverket | 0.3 | Cut down to cooldowns and the item tooltip (reads Skatteverket's recipes); not yet tested in game |
 | Eniro | 0.1 | Works in game (member list); position sharing not yet tested (needs a second member) |
-| Rattsmedicinalverket | 0.1 | Works in game (killer, level, ability, position from the Death Recap) |
+| Rattsmedicinalverket | 0.4 | Works in game (killer, level, ability, position from the Death Recap); 0.4 stops a second "unknown cause" record when `PLAYER_DEAD` fires again for the same death |
 | Polisen | 0.1 | Loads without errors; reports need a death to a hostile player |
-| Dodsannonser | 0.1 | Built, not yet tested in game |
+| Dodsannonser | 0.4 | Built, not yet tested in game (level-up notices added in 0.4) |
 | Handlaggaren | 0.2 | Built, not yet tested in game |
 | SCB | 0.1 | Built, not yet tested in game |
 | Kolapp | 0.2 | Works in game (quest tracker numbers) |
@@ -147,6 +147,8 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 - Wording is picked at random from lists in `Core.lua`, seeded by the death's id, so everyone sees the same text. It covers NPCs, abilities, hostile players ("Polisen är underrättad"), pets, falling, drowning and lava. There's an extra line when the killer was 5+ levels below the victim.
 - `/dodsannons` lists the last 10, `/dodsannons tyst` hides new ones in chat. Your own obituary is also posted to guild chat 2 s after you die (on by default, for members without the addon and the guild's Discord bridge; `/dodsannons gillet` turns it off). Members with the addon hide that guild line, since they already show the notice.
 - Polisen already files the report for player kills, through Rättsmedicinalverket.
+- The guild chat copy is hidden by sender too, not only by exact text: the line can differ from ours (the death count is each member's own, long fields get shortened), which showed the obituary twice (0.4).
+- Level-ups (0.4, 2026-11-09): "Familjenytt: Tungan Lingonsson (Rogue) fyller 14 i dag. Uppvaktning undanbedes." Death records don't cover levels, so on `PLAYER_LEVEL_UP` the one who levelled sends `L;<name>;<level>;<classFile>` (prefix `DODSANNONS`) and posts the notice in guild chat 2 s later (same `/dodsannons gillet` setting). Everyone with the addon writes the same notice (seeded by name and level) and hides the guild copy. Extra lines at 10, 20, 30, 40, 50 and a special notice at max level. `/dodsannons nivå` turns them off both ways (checkbox in `/gpanel addons`).
 
 ### Fun extras (social)
 - **Fotoalbum:** takes a screenshot (`Screenshot()`) on level-up, epic loot or a boss kill, and keeps a list with dates.

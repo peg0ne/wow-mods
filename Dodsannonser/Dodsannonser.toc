@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Dödsannonser
-## Notes: Obituaries for THÖNDERSTÖRM: when a guild member with Rättsmedicinalverket dies, everyone with this addon gets a newspaper-style obituary in chat (who, what killed them, where). /dodsannons lists recent ones. Needs Rättsmedicinalverket.
-## Version: 0.3
+## Notes: Obituaries for THÖNDERSTÖRM: when a guild member with Rättsmedicinalverket dies, everyone with this addon gets a newspaper-style obituary in chat (who, what killed them, where). Level-ups get a congratulation notice too. /dodsannons lists recent obituaries. Needs Rättsmedicinalverket.
+## Version: 0.4
 ## Dependencies: Rattsmedicinalverket
 ## SavedVariables: DodsannonserDB
 Core.lua
