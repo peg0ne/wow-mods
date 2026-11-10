@@ -56,8 +56,8 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Polisen | 0.1 | Loads without errors; reports need a death to a hostile player |
 | Dodsannonser | 0.4 | Built, not yet tested in game (level-up notices added in 0.4) |
 | Handlaggaren | 0.2 | Built, not yet tested in game |
-| SCB | 0.1 | Built, not yet tested in game |
-| Kolapp | 0.2 | Works in game (quest tracker numbers) |
+| SCB | 0.3 | Roster export works in game; the rest is not yet tested. 0.3 saves the whole guild roster (rank, class, level, notes, last online) to `SCBDB.roster` |
+| Kolapp | 0.3 | Works in game (quest tracker numbers); 0.3 adds the quest on item tooltips, not yet tested in game |
 
 ## Accepted ideas
 
@@ -129,6 +129,10 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 - The client has no quest chain data, so `Kolapp/Data.lua` (about 2,700 quests) is generated from Questie's Classic database, fixes and blacklist (Questie v11.38.0, the last tag with that database; GPLv3) by `tools/kolapp_data.py`. Re-run it to refresh the data.
 - Number = longest run of earlier quests + 1; total = number + longest run of later quests. Quests your race or class can't take are dropped, so class-quest branches only count for that class. Hub quests that open several branches count the longest one.
 - The tracker is labelled by hooking every `*BlockMixin:SetHeader` (and older trackers' `SetBlockHeader`) and setting the title again with the number, so the tracker measures the longer line itself. Only blocks whose title contains the quest's title are changed (this client puts the level in front, "[21] Beren's Peril", and keeps the quest ID in the block's `poiQuestID`).
+- Item tooltips (0.3; bags, Baganator, bank, links) name the quest an item belongs to: "Uppdrag: Wolves Across the Border (1/2) 3/8" for quests in your log, "Startar: …" for items that start a quest. A quest item that belongs to no quest in your log names its quests with "klar, kan slängas" or "inte i loggen". `/kolapp föremål` turns it off.
+- Matches item objectives by name from the live quest log (`C_QuestLog.GetQuestObjectives`) and usable quest items by ID, plus `Kolapp/ItemData.lua` (item objectives, items a quest hands out, `requiredSourceItems` and quest-starting items from the same Questie data, also built by `tools/kolapp_data.py`) for items that aren't an objective, like letters to deliver. Questie's item database adds quest items a quest rewards and nothing needs ("Belöning från: Thule Ravenclaw" on Bethor's Potion).
+- For a copy in the bags, `C_Container.GetContainerItemQuestInfo` names the quest the item starts or belongs to, whatever its category (Venture Co. Work Order is Miscellaneous and missing from Questie's data).
+- Quest items still unexplained are looked up in the text of the quests in your log ("Nämns i: …"); reading that text selects each quest in turn and puts the old selection back. An item still unknown shows "Kölapp: okänt questföremål (ID …)".
 - Ideas for later: numbers in the NPC's quest list (gossip frame).
 
 ### Utmärkelser: homemade achievements (social)

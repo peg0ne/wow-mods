@@ -14,7 +14,7 @@
 local _, ns = ...
 local quests = ns.quests
 
-local defaults = { chat = true }
+local defaults = { chat = true, items = true }
 local db
 
 local function Print(text)
@@ -101,6 +101,14 @@ end
 local function Label(id)
 	local step, total = Position(id)
 	if step then return "(" .. step .. "/" .. total .. ")" end
+end
+
+ns.Label = Label
+
+-- For Items.lua: can the player's race take a quest with this race mask?
+function ns.RaceFits(mask)
+	if not predecessors then Build() end
+	return HasBit(mask or 0, raceID)
 end
 
 local function Name(id)
@@ -241,6 +249,7 @@ events:SetScript("OnEvent", function(_, event, ...)
 	elseif event == "ADDON_LOADED" and ... == "Kolapp" then
 		KolappDB = KolappDB or {}
 		db = KolappDB
+		ns.db = db
 		db.trace = nil -- left by a 0.1 diagnostic
 		for k, v in pairs(defaults) do
 			if db[k] == nil then db[k] = v end
@@ -264,8 +273,12 @@ SlashCmdList.KOLAPP = function(msg)
 	if msg == "tyst" then
 		db.chat = not db.chat
 		Print("meddelanden i chatten är nu " .. (db.chat and "på" or "av") .. ".")
+	elseif msg == "föremål" or msg == "foremal" then
+		db.items = not db.items
+		Print("uppdrag på föremålens tooltips är nu " .. (db.items and "på" or "av") .. ".")
 	else
 		Print("visar var en quest ligger i sin kedja, till exempel (2/4) i questfönstrets rubrik. "
-			.. "Meddelanden i chatten: " .. (db.chat and "på" or "av") .. " (/kolapp tyst växlar).")
+			.. "Meddelanden i chatten: " .. (db.chat and "på" or "av") .. " (/kolapp tyst växlar). "
+			.. "Uppdrag på föremål: " .. (db.items and "på" or "av") .. " (/kolapp föremål växlar).")
 	end
 end

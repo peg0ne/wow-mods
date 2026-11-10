@@ -197,7 +197,42 @@ local function OnAddonMessage(prefix, msg, channel, sender)
 	end
 end
 
+-- A copy of the whole guild roster (what the Guild window shows), kept in
+-- SCBDB.roster so it can be read outside the game.
+local function SaveRoster()
+	local n = GetNumGuildMembers()
+	if not n or n == 0 then return end
+	local members = {}
+	for i = 1, n do
+		local name, rank, rankIndex, level, class, zone, note, officerNote, online, status, classFile,
+			points, _, mobile, _, _, guid = GetGuildRosterInfo(i)
+		name = ns.Short(Plain(name))
+		if name then
+			local m = {
+				rank = Plain(rank), rankIndex = Plain(rankIndex), level = Plain(level),
+				class = Plain(class), classFile = Plain(classFile), zone = Plain(zone),
+				note = Plain(note), officerNote = Plain(officerNote), online = Plain(online) and true or false,
+				status = Plain(status), achievementPoints = Plain(points), mobile = Plain(mobile) or nil, guid = Plain(guid),
+			}
+			if m.note == "" then m.note = nil end
+			if m.officerNote == "" then m.officerNote = nil end
+			if m.status == 0 then m.status = nil end
+			if not m.achievementPoints or m.achievementPoints < 0 then m.achievementPoints = nil end -- -1 on Forever
+			if not m.online and GetGuildRosterLastOnline then
+				local years, months, days, hours = GetGuildRosterLastOnline(i)
+				years, months, days, hours = Plain(years), Plain(months), Plain(days), Plain(hours)
+				if years or months or days or hours then
+					m.offlineHours = (((years or 0) * 365 + (months or 0) * 30 + (days or 0)) * 24) + (hours or 0)
+				end
+			end
+			members[name] = m
+		end
+	end
+	db.roster = { at = time(), count = n, members = members }
+end
+
 local function OnRoster()
+	SaveRoster()
 	if GetNumGuildMembers() == 0 or not (GetGuildRosterShowOffline and GetGuildRosterShowOffline()) then return end
 	local all = {}
 	for i = 1, GetNumGuildMembers() do
@@ -318,6 +353,7 @@ events:SetScript("OnEvent", function(_, event, ...)
 		lastMoney = GetMoney()
 		local register = C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix or RegisterAddonMessagePrefix
 		if register then register(ns.PREFIX) end
+		if C_GuildInfo and C_GuildInfo.GuildRoster then C_GuildInfo.GuildRoster() end
 		C_Timer.After(20, function()
 			SendFigures(true)
 			ns.Ask()

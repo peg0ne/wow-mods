@@ -1,7 +1,9 @@
 ## Interface: 16001
 ## Title: Kölapp
-## Notes: Shows where a quest sits in its quest chain, like (2/4) in the quest window title, and tells you in chat what comes next when you hand one in. /kolapp for settings.
-## Version: 0.2
+## Notes: Shows where a quest sits in its quest chain, like (2/4) in the quest window title, and tells you in chat what comes next when you hand one in. Item tooltips name the quest an item belongs to. /kolapp for settings.
+## Version: 0.3
 ## SavedVariables: KolappDB
 Data.lua
+ItemData.lua
 Core.lua
+Items.lua

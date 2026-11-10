@@ -1,4 +1,5 @@
-"""Builds Kolapp/Data.lua (quest chains) from Questie's Classic quest database.
+"""Builds Kolapp/Data.lua (quest chains) and Kolapp/ItemData.lua (which quests
+each item belongs to) from Questie's Classic quest database.
 
 Usage:
     pip install lupa
@@ -6,7 +7,8 @@ Usage:
 
 Downloads Questie's Classic quest data, its quest fixes and its blacklist
 (tag below) into <download dir>, runs them in a sandboxed Lua 5.1 with the
-Questie modules they need stubbed out, and writes Kolapp/Data.lua.
+Questie modules they need stubbed out, and writes Kolapp/Data.lua and
+Kolapp/ItemData.lua.
 
 Questie (https://github.com/Questie/Questie) is GPLv3; the chain data in
 Data.lua is derived from it.
@@ -23,7 +25,9 @@ FILES = {
     "classicQuestDB.lua": "Database/Classic/classicQuestDB.lua",
     "classicQuestFixes.lua": "Database/Corrections/classicQuestFixes.lua",
     "QuestieQuestBlacklist.lua": "Database/Corrections/QuestieQuestBlacklist.lua",
+    "classicItemDB.lua": "Database/Classic/classicItemDB.lua",
 }
+QUEST_ITEM_CLASS = 12
 CLASSES = ["WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID"]
 
 # Stubs for the parts of Questie the data files touch. Unknown module fields
@@ -112,6 +116,45 @@ def to_int(value):
     return int(value) if isinstance(value, (int, float)) else 0
 
 
+def rows(value):
+    """A Lua array as a Python list (nils skipped)."""
+    if value is None or lua51.lua_type(value) != "table":
+        return []
+    return [v for _, v in sorted(value.items(), key=lambda kv: kv[0])]
+
+
+def first_int(value):
+    """The first number in a Lua row like {item, text, icon}."""
+    if isinstance(value, (int, float)):
+        return int(value)
+    if value is not None and lua51.lua_type(value) == "table":
+        v = value[1]
+        if isinstance(v, (int, float)):
+            return int(v)
+    return 0
+
+
+def quest_items(row, K):
+    """(items the quest needs or hands out, items that start it)."""
+    needs = set()
+    objectives = row.get(K["objectives"])
+    if objectives is not None and lua51.lua_type(objectives) == "table":
+        for entry in rows(objectives[3]):  # itemObjective
+            needs.add(first_int(entry))
+        for entry in rows(objectives[6]):  # spellObjective: {spell, text, item}
+            if lua51.lua_type(entry) == "table" and isinstance(entry[3], (int, float)):
+                needs.add(int(entry[3]))
+    needs.add(to_int(row.get(K["sourceItemId"])))
+    needs.update(to_list(row.get(K["requiredSourceItems"])))
+    starts = set()
+    started_by = row.get(K["startedBy"])
+    if started_by is not None and lua51.lua_type(started_by) == "table":
+        starts.update(to_list(started_by[3]))  # {creatures, objects, items}
+    needs.discard(0)
+    starts.discard(0)
+    return needs, starts
+
+
 def main():
     if len(sys.argv) != 2:
         sys.exit(__doc__)
@@ -151,9 +194,18 @@ def main():
     blacklisted = {int(q) for q, v in Blacklist.Load(Blacklist).items() if v is True}
 
     K = keys
+    item_needs, item_starts, item_quest = {}, {}, {}  # item -> quests; quest -> (name, races)
     for qid, row in raw.items():
         if qid in blacklisted or row.get(K["name"]) is None:
             continue
+        needs, starts = quest_items(row, K)
+        for item in needs:
+            item_needs.setdefault(item, set()).add(qid)
+        for item in starts:
+            item_starts.setdefault(item, set()).add(qid)
+        if needs or starts:
+            item_quest[qid] = (row[K["name"]], to_int(row.get(K["requiredRaces"])))
+
         if to_int(row.get(K["specialFlags"])) & 1:  # repeatable
             continue
         quests[qid] = {
@@ -163,6 +215,30 @@ def main():
             "pre": set(to_list(row.get(K["preQuestGroup"])) + to_list(row.get(K["preQuestSingle"]))),
             "next": to_int(row.get(K["nextQuestInChain"])),
         }
+
+    # The item database adds quests an item is related to or starts, and
+    # which quests reward a quest item (like Bethor's Potion, which no quest
+    # needs afterwards).
+    run(lua, directory, "classicItemDB.lua")
+    IK = {k: int(v) for k, v in DB.itemKeys.items()}
+    item_rewards = {}
+
+    def note(qid, table, item):
+        row = raw.get(qid)
+        if qid in blacklisted or not row or row.get(K["name"]) is None:
+            return
+        table.setdefault(item, set()).add(qid)
+        item_quest[qid] = (row[K["name"]], to_int(row.get(K["requiredRaces"])))
+
+    for item, row in g.loadstring(DB.itemData)().items():
+        item = int(item)
+        for qid in to_list(row[IK["relatedQuests"]]):
+            note(qid, item_needs, item)
+        if to_int(row[IK["startQuest"]]):
+            note(to_int(row[IK["startQuest"]]), item_starts, item)
+        if to_int(row[IK["class"]]) == QUEST_ITEM_CLASS and item not in item_needs:
+            for qid in to_list(row[IK["questRewards"]]):
+                note(qid, item_rewards, item)
 
     # Per faction: the faction (and per class) fixes only change next-quest
     # links. Adding every class's and race's links is fine because the addon
@@ -225,6 +301,25 @@ def main():
         f.write("\n".join(lines))
         f.write("\n}\n")
     print(f"{len(lines)} quests in chains -> {os.path.normpath(out)}")
+
+    out = os.path.join(os.path.dirname(out), "ItemData.lua")
+    with open(out, "w", encoding="utf-8", newline="\n") as f:
+        f.write(f"-- Generated by tools/kolapp_data.py from Questie {TAG} (GPLv3,\n")
+        f.write("-- https://github.com/Questie/Questie). Don't edit by hand.\n")
+        f.write("-- ns.itemNeeds[itemID] = quests that collect, use or hand out the item\n")
+        f.write("-- ns.itemStarts[itemID] = quests the item starts\n")
+        f.write("-- ns.itemRewards[itemID] = quests that reward the (quest) item\n")
+        f.write("-- ns.itemQuests[questID] = {name, required races (0 = any)}\n")
+        f.write("local _, ns = ...\n")
+        for name, table in (("itemNeeds", item_needs), ("itemStarts", item_starts), ("itemRewards", item_rewards)):
+            f.write(f"ns.{name} = {{\n")
+            f.write("\n".join(f"[{i}]={lua_list(table[i])}," for i in sorted(table)))
+            f.write("\n}\n")
+        f.write("ns.itemQuests = {\n")
+        f.write("\n".join(f"[{q}]={{{lua_string(n)},{r}}}," for q, (n, r) in sorted(item_quest.items())))
+        f.write("\n}\n")
+    print(f"{len(item_needs)} items needed, {len(item_starts)} starting quests, "
+          f"{len(item_rewards)} quest item rewards -> {os.path.normpath(out)}")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: SCB
 ## Notes: Guild statistics for THÖNDERSTÖRM: deaths (and what caused them), kills, quests, gold earned and spent, time played, for every member with the addon and the guild as a whole, with fun facts. /scb opens the tables. Uses Rättsmedicinalverket for deaths if it is on.
-## Version: 0.2
+## Version: 0.3
 ## OptionalDeps: Rattsmedicinalverket
 ## SavedVariables: SCBDB
 ## SavedVariablesPerCharacter: SCBCharDB
