@@ -17,6 +17,8 @@
 -- /skatt; 2.2 brought it back, since the compact bar that drops open is
 -- quicker to glance at than a full window.
 --
+-- 2.5 celebrates a tax payment on screen and in sound (/gpanel firande).
+--
 -- 2.3 follows Skatteverket 0.28: standing is counted in play time on the
 -- whole account (8 h unpaid neutral, 12 h negative), and the best character
 -- on the account counts for all of them.
@@ -856,6 +858,8 @@ local SETTINGS = {
 	} },
 	{ addon = ADDON, title = "Gildepanel", db = "GildepanelDB", items = {
 		{ key = "warn", label = "Förvarna innan skatteställningen sjunker", default = true },
+		{ key = "celebrate", label = "Fira när du betalar skatt", default = true },
+		{ key = "celebrateQuiet", label = "Med ljud", invert = true },
 		{ key = "compact", label = "Kompakt rad tills musen är över", default = true, slash = { "GILDEPANEL", "kompakt" } },
 		{ key = "hideMinimap", label = "Visa minimapknappen", invert = true, default = true, slash = { "GILDEPANEL", "minimap" } },
 	} },
@@ -1114,6 +1118,242 @@ ToggleHub = function()
 end
 
 ------------------------------------------------------------------------
+-- Firandet: a show on screen and in your speakers when you pay your tax.
+-- A payment is spotted from the outside: on PLAYER_MONEY your money went
+-- down and SkatteverketCharDB.owed went down with it. A snapshot taken every
+-- second (and after each check) is the "before". Paying your way out of
+-- Neutral or Negativ gets the bigger show. /gpanel firande test previews it.
+
+local FONT = "Fonts\\MORPHEUS.TTF"
+local COIN = "Interface\\Icons\\INV_Misc_Coin_01"
+local STAR = "Interface\\Cooldown\\star4"
+local EDGE = "Interface\\FullScreenTextures\\LowHealth"
+local SHOW_FOR = 4.5
+local CHEERS = {
+	"Välfärden tackar dig.",
+	"Gildebanken jublar.",
+	"Skatteverket ser dig. Och är nöjt.",
+	"Det är fint att betala skatt.",
+	"Ingen restskatt här inte.",
+	"Kvittot är arkiverat i tre exemplar.",
+	"Ditt bidrag bygger " .. GUILD .. ".",
+	"En sann förebild för gildet.",
+}
+local STANDING_NAMES = { good = "|cff40ff40God|r", neutral = "|cffffd100Neutral|r", negative = "|cffff4040Negativ|r" }
+
+-- Plays the first sound the client knows: SOUNDKIT names, then kit numbers.
+-- PlaySound returns false for a kit it does not have, so try the next.
+local function Sound(list)
+	if not PlaySound or db.celebrateQuiet then return end
+	for _, kit in ipairs(list) do
+		local id = kit
+		if type(kit) == "string" then id = SOUNDKIT and SOUNDKIT[kit] end
+		if id then
+			local ok, played = pcall(PlaySound, id, "SFX")
+			if ok and played then return end
+		end
+	end
+end
+
+local show
+local function BuildShow()
+	show = CreateFrame("Frame", nil, UIParent)
+	show:SetAllPoints(UIParent)
+	show:SetFrameStrata("FULLSCREEN_DIALOG")
+	show:EnableMouse(false)
+	show:Hide()
+
+	show.flash = show:CreateTexture(nil, "BACKGROUND")
+	show.flash:SetAllPoints()
+	SetColor(show.flash, 1, 0.78, 0.2, 1)
+	show.flash:SetBlendMode("ADD")
+
+	show.edge = show:CreateTexture(nil, "BORDER")
+	show.edge:SetAllPoints()
+	show.edge:SetTexture(EDGE)
+	show.edge:SetVertexColor(1, 0.75, 0.1)
+	show.edge:SetBlendMode("ADD")
+
+	-- The banner: a band, a turning star behind the bolt, the big words.
+	local b = CreateFrame("Frame", nil, show)
+	b:SetSize(760, 150)
+	show.banner = b
+	b.band = b:CreateTexture(nil, "BACKGROUND")
+	b.band:SetPoint("LEFT")
+	b.band:SetPoint("RIGHT")
+	b.band:SetHeight(112)
+	SetColor(b.band, 0, 0, 0, 0.55)
+	for i, point in ipairs({ "TOP", "BOTTOM" }) do
+		local line = b:CreateTexture(nil, "BORDER")
+		line:SetPoint(point .. "LEFT", b.band, point .. "LEFT")
+		line:SetPoint(point .. "RIGHT", b.band, point .. "RIGHT")
+		line:SetHeight(2)
+		SetColor(line, 1, 0.82, 0.2, 0.9)
+		b["line" .. i] = line
+	end
+	b.star = b:CreateTexture(nil, "ARTWORK")
+	b.star:SetSize(220, 220)
+	b.star:SetPoint("CENTER", b, "TOP", 0, 6)
+	b.star:SetTexture(STAR)
+	b.star:SetVertexColor(1, 0.85, 0.3)
+	b.star:SetBlendMode("ADD")
+	b.bolt = b:CreateTexture(nil, "OVERLAY")
+	b.bolt:SetSize(64, 64)
+	b.bolt:SetPoint("CENTER", b.star)
+	b.bolt:SetTexture(Loaded("Skatteverket") and "Interface\\AddOns\\Skatteverket\\Media\\Bolt" or "Interface\\Icons\\Spell_Nature_Lightning")
+	b.title = b:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+	if not pcall(b.title.SetFont, b.title, FONT, 44, "THICKOUTLINE") then b.title:SetFontObject("GameFontNormalHuge") end
+	b.title:SetPoint("CENTER", b.band, "CENTER", 0, 16)
+	b.title:SetTextColor(1, 0.84, 0.1)
+	b.sub = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+	b.sub:SetPoint("TOP", b.title, "BOTTOM", 0, -6)
+
+	show.coins = {}
+	show:SetScript("OnUpdate", function(self, elapsed)
+		self.t = self.t + elapsed
+		local t = self.t
+		-- The flash and the glowing edge.
+		self.flash:SetAlpha(t < 0.12 and t / 0.12 * 0.35 or math.max(0, 0.35 * (1 - (t - 0.12) / 0.7)))
+		local fade = t > SHOW_FOR - 0.8 and math.max(0, (SHOW_FOR - t) / 0.8) or 1
+		self.edge:SetAlpha((0.45 + 0.35 * math.sin(t * 6)) * fade * (self.big and 1 or 0.6))
+		-- The banner bounces in from large, then sits still and fades.
+		local p = math.min(t / 0.7, 1)
+		local ease = p >= 1 and 1 or 1 + 2 ^ (-10 * p) * math.sin((p * 10 - 0.75) * 2 * math.pi / 3)
+		local scale = math.max(0.05, 2.4 - 1.4 * ease)
+		local b = self.banner
+		b:SetScale(scale)
+		b:ClearAllPoints()
+		b:SetPoint("CENTER", UIParent, "CENTER", 0, 170 / scale)
+		b:SetAlpha(math.min(t / 0.15, 1) * fade)
+		if b.star.SetRotation then b.star:SetRotation(t * 1.3) end
+		b.star:SetAlpha(0.6 + 0.4 * math.sin(t * 4))
+		-- The coins: thrown out and pulled down, spinning.
+		local alive = false
+		for _, c in ipairs(self.coins) do
+			if c.on then
+				c.wait = c.wait - elapsed
+				if c.wait <= 0 then
+					c.life = c.life + elapsed
+					c.vy = c.vy - 1100 * elapsed
+					c.x, c.y = c.x + c.vx * elapsed, c.y + c.vy * elapsed
+					c.rot = c.rot + c.spin * elapsed
+					c.tex:ClearAllPoints()
+					c.tex:SetPoint("CENTER", UIParent, "BOTTOMLEFT", c.x, c.y)
+					if c.tex.SetRotation then c.tex:SetRotation(c.rot) end
+					c.tex:SetAlpha(math.min(1, (c.ttl - c.life) / 0.5))
+					c.tex:Show()
+					if c.life >= c.ttl or c.y < -40 then c.on = false c.tex:Hide() end
+				end
+				alive = alive or c.on
+			end
+		end
+		if t >= SHOW_FOR and not alive then self:Hide() end
+	end)
+end
+
+local function Coin(i)
+	local c = show.coins[i]
+	if not c then
+		c = { tex = show:CreateTexture(nil, "OVERLAY") }
+		c.tex:SetTexture(COIN)
+		c.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+		show.coins[i] = c
+	end
+	local size = math.random(16, 30)
+	c.tex:SetSize(size, size)
+	c.tex:Hide()
+	c.on, c.life, c.rot = true, 0, math.random() * 6
+	c.spin = (math.random() - 0.5) * 14
+	return c
+end
+
+local function Celebrate(paid, before, after)
+	if db.celebrate == false then return end
+	if not show then BuildShow() end
+	local big = before and before ~= "good" and after == "good"
+	show.t, show.big = 0, big
+	local b = show.banner
+	b.title:SetText(big and "SKULDEN ÄR BETALD!" or "SKATTEN ÄR BETALD!")
+	local sub = Money(paid)
+	if big then
+		sub = sub .. "   " .. STANDING_NAMES[before] .. " → " .. STANDING_NAMES.good .. "\n|cffffffffVälkommen tillbaka in i värmen!|r"
+	else
+		sub = sub .. "\n|cffffffff" .. CHEERS[math.random(#CHEERS)] .. "|r"
+	end
+	b.sub:SetText(sub)
+
+	-- A burst from behind the banner; on the big one, a rain from the top too.
+	local w, h = UIParent:GetWidth(), UIParent:GetHeight()
+	local cx, cy = w / 2, h / 2 + 170
+	local burst = math.min(60, 18 + floor((paid or 0) / 10000) * 3)
+	local n = 0
+	for _ = 1, burst do
+		n = n + 1
+		local c = Coin(n)
+		local a = math.random() * math.pi
+		local speed = 300 + math.random() * 450
+		c.x, c.y = cx, cy
+		c.vx, c.vy = math.cos(a) * speed, math.sin(a) * speed * 0.9 + 150
+		c.wait, c.ttl = math.random() * 0.15, 2.4 + math.random()
+	end
+	if big then
+		for _ = 1, 50 do
+			n = n + 1
+			local c = Coin(n)
+			c.x, c.y = math.random() * w, h + 30
+			c.vx, c.vy = (math.random() - 0.5) * 80, -math.random() * 200
+			c.wait, c.ttl = 0.4 + math.random() * 1.6, 3
+		end
+	end
+	for i = n + 1, #show.coins do show.coins[i].on = false show.coins[i].tex:Hide() end
+	show:Show()
+
+	-- The sound: the till's coins, then a fanfare, bigger for a cleared debt.
+	local COINS = { "LOOT_WINDOW_COIN_SOUND", 120 }
+	for i = 0, big and 5 or 3 do
+		C_Timer.After(i * 0.11, function() Sound(COINS) end)
+	end
+	C_Timer.After(0.25, function()
+		if big then
+			Sound({ "UI_LEGENDARY_LOOT_TOAST", "LEVELUPSOUND", 888, "UI_EPICLOOT_TOAST" })
+		else
+			Sound({ "UI_EPICLOOT_TOAST", "UI_IG_STORE_PURCHASE_DELIVERED_TOAST_01", "READY_CHECK", 8960 })
+		end
+	end)
+	if big then C_Timer.After(1.1, function() Sound({ "UI_BNET_TOAST", "READY_CHECK", 8960 }) end) end
+end
+
+-- What a payment is measured against.
+local before
+local function Snapshot()
+	local c = SkatteverketCharDB
+	if not c or not InGuild() then before = nil return end
+	local s = TaxState()
+	before = { owed = c.owed or 0, money = GetMoney(), standing = s.debt and s.standing or "good" }
+end
+
+local checking = false
+local function CheckPayment()
+	if checking then return end
+	checking = true
+	local was = before
+	-- Skatteverket books the payment in the same event; look a moment later.
+	C_Timer.After(0.3, function()
+		checking = false
+		local c = SkatteverketCharDB
+		if was and c and InGuild() then
+			local spent = was.money - GetMoney()
+			local cleared = was.owed - (c.owed or 0)
+			if spent >= 1 and cleared >= 1 then
+				local s = TaxState()
+				Celebrate(math.max(spent, cleared), was.standing, s.debt and s.standing or "good")
+			end
+		end
+		Snapshot()
+	end)
+end
+
+------------------------------------------------------------------------
 -- A heads-up in chat an hour of play before the standing drops a step.
 
 local warned = {}
@@ -1164,6 +1404,8 @@ events:SetScript("OnEvent", function(_, event, arg)
 		C_Timer.NewTicker(5, function() RefreshMini() end)
 		C_Timer.NewTicker(60, CheckWarning)
 		C_Timer.After(25, CheckWarning)
+		Snapshot()
+		C_Timer.NewTicker(1, function() if not checking then Snapshot() end end)
 		return
 	elseif event == "GUILD_ROSTER_UPDATE" or event == "PLAYER_GUILD_UPDATE" then
 		guildDirty = true
@@ -1173,6 +1415,7 @@ events:SetScript("OnEvent", function(_, event, arg)
 		-- books it in the same event; look a moment later.
 		guildDirty = true
 		C_Timer.After(0.2, Refresh)
+		CheckPayment()
 		return
 	elseif event == "GUILDBANKFRAME_OPENED" or event == "GUILDBANKFRAME_CLOSED" then
 		bankOpen = event == "GUILDBANKFRAME_OPENED"
@@ -1233,6 +1476,24 @@ SlashCmdList.GILDEPANEL = function(msg)
 			Print("längsta kameraavstånd: " .. CameraText(got) .. ".")
 		end
 		if hub and hub:IsShown() then RefreshHub() end
+	elseif cmd == "firande" or cmd == "fanfare" then
+		if rest == "test" then
+			local was = db.celebrate
+			db.celebrate = true
+			Celebrate(123456, "neutral", "good")
+			db.celebrate = was
+		elseif rest == "test2" then
+			local was = db.celebrate
+			db.celebrate = true
+			Celebrate(4321, "good", "good")
+			db.celebrate = was
+		elseif rest == "ljud" or rest == "sound" then
+			db.celebrateQuiet = not db.celebrateQuiet
+			Print(db.celebrateQuiet and "firandet är tyst." or "firandet har ljud.")
+		else
+			db.celebrate = db.celebrate == false
+			Print(db.celebrate and "firar när du betalar skatt. Prova med /gpanel firande test." or "inget firande när du betalar skatt.")
+		end
 	elseif cmd == "varning" or cmd == "warn" then
 		db.warn = db.warn == false
 		Print(db.warn and "varnar en timme speltid innan ställningen sjunker." or "inga förvarningar.")
