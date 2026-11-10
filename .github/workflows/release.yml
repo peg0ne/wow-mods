@@ -23,6 +23,14 @@ jobs:
           luac5.1 -v
           find . -name '*.lua' -not -path './.git/*' -print0 | xargs -0 -n1 luac5.1 -p
 
+      # Postnord tells members when the guild has a newer pack; it learns the
+      # pack's version from the tag (v1.6.1 -> 1.6.1). From the repo it says dev.
+      - name: Stamp the pack version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          sed -i "s/^## Version: dev.*/## Version: $version/" Postnord/Postnord.toc
+          grep -q "^## Version: $version" Postnord/Postnord.toc
+
       - name: Zip the addons
         run: |
           # WowUp-CF only downloads a zip whose name ends in -forever for the
