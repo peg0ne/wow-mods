@@ -5,7 +5,8 @@
 -- the buttons run the addons' own slash commands.
 --
 -- The Addons window (/gpanel addons) opens the windows of the repo's other
--- addons and turns their automatic settings on and off.
+-- addons and turns their automatic settings on and off. It also sets how far
+-- out the camera zooms (/gpanel kamera).
 --
 -- The panel shows as a compact bar and opens to the full panel while the
 -- mouse is over it (/gpanel kompakt turns that off). Your own tax is read
@@ -765,6 +766,47 @@ end
 
 local hub
 
+------------------------------------------------------------------------
+-- Camera distance: how far out the mouse wheel zooms. The game keeps it in
+-- the cameraDistanceMaxZoomFactor setting, times 15 yards; the client
+-- caps it (2.6 on a retail engine), so the value is read back after it is
+-- set. Kept in GildepanelDB.cameraMax and set again at login, since the
+-- game can put it back; nil leaves the game's own value alone.
+
+local CAMERA_CVAR = "cameraDistanceMaxZoomFactor"
+local CAMERA_MIN, CAMERA_MAX, CAMERA_YARDS = 1, 4, 15
+
+local function GetCamera()
+	local get = C_CVar and C_CVar.GetCVar or GetCVar
+	local ok, v = pcall(get, CAMERA_CVAR)
+	return ok and tonumber(v) or nil
+end
+
+local function SetCamera(factor)
+	local set = C_CVar and C_CVar.SetCVar or SetCVar
+	pcall(set, CAMERA_CVAR, tostring(factor))
+	return GetCamera()
+end
+
+local function DefaultCamera()
+	local get = C_CVar and C_CVar.GetCVarDefault or GetCVarDefault
+	local ok, v = pcall(get or error, CAMERA_CVAR)
+	return ok and tonumber(v) or 1.9
+end
+
+local function CameraText(factor)
+	if not factor then return "okänt" end
+	return format("%.1f (%d yards)", factor, floor(factor * CAMERA_YARDS + 0.5))
+end
+
+-- Sets and remembers it; returns the value the game took.
+local function ChooseCamera(factor)
+	factor = math.max(CAMERA_MIN, math.min(CAMERA_MAX, floor(factor * 10 + 0.5) / 10))
+	local got = SetCamera(factor)
+	db.cameraMax = got or factor
+	return got
+end
+
 local WINDOWS = {
 	{ "Skatteverket", "Skatteverket", "SKATTEVERKET" },
 	{ "Skatteverket", "Yrkesregister", "SKATTEVERKET", "yrken" },
@@ -847,6 +889,7 @@ local function SetSetting(group, item, on)
 end
 
 local function RefreshHub()
+	if hub.camera then hub.camera() end
 	for _, b in ipairs(hub.windows) do
 		if Loaded(b.addon) and SlashCmdList[b.key] then b:Enable() else b:Disable() end
 	end
@@ -958,6 +1001,73 @@ local function BuildHub()
 		table.insert(hub.windows, b)
 	end
 
+	-- Camera distance.
+	y = y - 10
+	Section(hub, "Kamera", y)
+	y = y - 24
+	local camLabel = Text(hub, "GameFontHighlightSmall", "TOPLEFT", PAD, y)
+	y = y - 18
+	local slider = CreateFrame("Slider", nil, hub)
+	slider:SetOrientation("HORIZONTAL")
+	slider:SetSize(HW - 2 * PAD - 70, 14)
+	slider:SetPoint("TOPLEFT", PAD + 2, y)
+	slider:SetMinMaxValues(CAMERA_MIN, CAMERA_MAX)
+	slider:SetValueStep(0.1)
+	if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
+	slider:EnableMouseWheel(true)
+	local track = slider:CreateTexture(nil, "BACKGROUND")
+	SetColor(track, 1, 1, 1, 0.12)
+	track:SetPoint("LEFT")
+	track:SetPoint("RIGHT")
+	track:SetHeight(4)
+	local thumb = slider:CreateTexture(nil, "OVERLAY")
+	SetColor(thumb, 1, 0.82, 0, 1)
+	thumb:SetSize(8, 14)
+	slider:SetThumbTexture(thumb)
+	local function ShowCamera(factor)
+		camLabel:SetText("Längsta kameraavstånd: " .. CameraText(factor)
+			.. (db.cameraMax and "" or "  |cff808080(spelets eget)|r"))
+	end
+	slider:SetScript("OnValueChanged", function(self, value)
+		if self.setting then return end
+		ShowCamera(value)
+		-- Apply when the drag stops, or now for a click or the mouse wheel.
+		self.pending = value
+		if not self.dragging then
+			self.pending = nil
+			ChooseCamera(value)
+			ShowCamera(GetCamera())
+		end
+	end)
+	slider:SetScript("OnMouseDown", function(self) self.dragging = true end)
+	slider:SetScript("OnMouseUp", function(self)
+		self.dragging = false
+		if self.pending then
+			local v = self.pending
+			self.pending = nil
+			ChooseCamera(v)
+		end
+		hub.camera()
+	end)
+	slider:SetScript("OnMouseWheel", function(self, delta)
+		self:SetValue(self:GetValue() + delta * 0.1)
+	end)
+	local reset = Button(hub, "Standard", 62, function()
+		db.cameraMax = nil
+		SetCamera(DefaultCamera())
+		hub.camera()
+	end)
+	reset:SetPoint("LEFT", slider, "RIGHT", 6, 0)
+	hub.camera = function()
+		if slider.dragging then return end
+		local v = GetCamera()
+		slider.setting = true
+		if v then slider:SetValue(v) end
+		slider.setting = false
+		ShowCamera(v)
+	end
+	y = y - 22
+
 	-- Automatic settings, grouped by addon.
 	y = y - 10
 	Section(hub, "Automatik", y)
@@ -1048,6 +1158,7 @@ events:SetScript("OnEvent", function(_, event, arg)
 	if not db then return end
 	if event == "PLAYER_LOGIN" then
 		BuildMini()
+		if db.cameraMax then SetCamera(db.cameraMax) end
 		-- Open unless closed last time; without the minimap button it is the way in.
 		if db.shown ~= false then OpenPanel() end
 		C_Timer.NewTicker(5, function() RefreshMini() end)
@@ -1109,10 +1220,23 @@ SlashCmdList.GILDEPANEL = function(msg)
 		Print("panelen är tillbaka på sin plats.")
 	elseif cmd == "addons" or cmd == "mods" then
 		ToggleHub()
+	elseif cmd == "kamera" or cmd == "camera" then
+		if rest == "" then
+			Print("längsta kameraavstånd: " .. CameraText(GetCamera()) .. ". Ändra med /gpanel kamera 2.6, /gpanel kamera max eller /gpanel kamera standard.")
+		elseif rest == "standard" or rest == "default" or rest == "reset" then
+			db.cameraMax = nil
+			Print("längsta kameraavstånd tillbaka på spelets eget: " .. CameraText(SetCamera(DefaultCamera())) .. ".")
+		else
+			local v = rest == "max" and CAMERA_MAX or tonumber((rest:gsub(",", ".")))
+			if not v then Print("så här: /gpanel kamera 2.6 (mellan 1 och 4), max eller standard.") return end
+			local got = ChooseCamera(v)
+			Print("längsta kameraavstånd: " .. CameraText(got) .. ".")
+		end
+		if hub and hub:IsShown() then RefreshHub() end
 	elseif cmd == "varning" or cmd == "warn" then
 		db.warn = db.warn == false
 		Print(db.warn and "varnar en timme speltid innan ställningen sjunker." or "inga förvarningar.")
 	else
-		Print("/gpanel visar panelen. /gpanel addons, /gpanel kompakt, /gpanel lås, /gpanel minimap, /gpanel skala 0.9, /gpanel återställ, /gpanel varning.")
+		Print("/gpanel visar panelen. /gpanel addons, /gpanel kompakt, /gpanel lås, /gpanel minimap, /gpanel kamera 2.6, /gpanel skala 0.9, /gpanel återställ, /gpanel varning.")
 	end
 end
