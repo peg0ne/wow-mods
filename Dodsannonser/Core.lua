@@ -17,6 +17,12 @@
 -- obituary, post the notice in guild chat 2 s later. Everyone with the
 -- addon writes the same notice from that message (seeded by name and
 -- level) and hides the guild chat copy. /dodsannons nivå turns them off.
+--
+-- 0.5: hunter pets too. When your pet levels (UNIT_LEVEL for "pet", the same
+-- pet by GUID one level higher than we last saw it) the owner sends
+-- "P;<owner>;<pet>;<level>;<family>" and posts in guild chat the same way.
+-- Only hunters: a warlock's demon just follows its master's level.
+-- 0.4 ignores these messages. /dodsannons husdjur turns them off.
 
 local _, ns = ...
 
@@ -238,6 +244,49 @@ local function LevelNotice(name, level, classFile)
 end
 
 ---------------------------------------------------------------------------
+-- Pet level-up wording. {p} the pet, {pd} the pet with its family, {o} the
+-- owner, {os} the owner's genitive ("Kalles"), {l} the new level.
+
+local PET_OPENINGS = {
+	"{os} {pd} fyller {l} i dag.",
+	"Grattis {pd}, som har nått nivå {l}! Ägaren {o} är mycket stolt.",
+	"Det morras av glädje hos {o}: {pd} är nu nivå {l}.",
+	"{pd} har tagit steget upp till nivå {l}, med {o} i kopplet.",
+	"Gillet gratulerar {os} trogna {pd} på nivå {l}.",
+}
+
+local PET_CLOSINGS = {
+	"Extra ben i matskålen i kväll.",
+	"Klappar mottages tacksamt.",
+	"Husdjur är skattebefriade. Än så länge.",
+	"Glöm inte att mata.",
+	"Ingen har varit en bättre vovve. Eller vad det nu är.",
+	"Grattis från hela " .. ns.GUILD .. ".",
+}
+
+local PET_MAX_LINES = {
+	"{os} {pd} har nått nivå {l}, den högsta som finns. Bäst i kullen! Grattis från hela " .. ns.GUILD .. ".",
+	"Hela " .. ns.GUILD .. " firar: {os} {pd} är nivå {l}! Det blir köttben åt alla.",
+}
+
+-- Swedish genitive: Kalle → Kalles, Lars → Lars.
+local function Genitive(name)
+	if name:match("[sSxXzZ]$") then return name end
+	return name .. "s"
+end
+
+local function PetNotice(owner, pet, level, family)
+	local pick = Picker(owner .. ":" .. pet .. ":" .. level)
+	local vars = {
+		o = owner, os = Genitive(owner), p = pet, l = tostring(level),
+		pd = (family and family ~= "") and string.format("%s (%s)", pet, family:lower()) or pet,
+	}
+	local maxLevel = (GetMaxPlayerLevel and GetMaxPlayerLevel()) or 60
+	if level >= maxLevel then return Fill(pick(PET_MAX_LINES), vars) end
+	return Fill(pick(PET_OPENINGS), vars) .. " " .. pick(PET_CLOSINGS)
+end
+
+---------------------------------------------------------------------------
 
 local function OnDeath(r)
 	if not db or shown[r.id] or not InOurGuild() then return end
@@ -297,13 +346,70 @@ local function OnLevelUp(level)
 	end
 end
 
+local PAW = "|TInterface\\Icons\\Ability_Hunter_BeastTraining:14|t"
+
+local function ShowPetLevel(owner, pet, level, family)
+	local key = "pet:" .. owner .. ":" .. pet .. ":" .. level
+	if levelShown[key] then return end
+	levelShown[key] = true
+	local text = PetNotice(owner, pet, level, family)
+	ownCopy[GuildLine(text, "Familjenytt")] = true
+	heard["Familjenytt:" .. owner] = GetTime()
+	if not db.quiet then
+		DEFAULT_CHAT_FRAME:AddMessage(PAW .. " |cffffe28a" .. text .. "|r")
+	end
+	return text
+end
+
+-- Your pet's GUID and level as last seen, to tell a level-up from summoning
+-- another pet.
+local petGUID, petLevel
+
+local function Plain(v)
+	if v == nil or (issecretvalue and issecretvalue(v)) then return nil end
+	return v
+end
+
+local function ReadPet()
+	if not UnitExists("pet") then petGUID, petLevel = nil, nil return end
+	local guid, level = Plain(UnitGUID("pet")), Plain(UnitLevel("pet"))
+	if guid ~= petGUID then
+		-- Another pet, or the first look at this one: only remember it.
+		petGUID, petLevel = guid, level
+		return
+	end
+	local old = petLevel
+	petLevel = level
+	if not (old and level and level == old + 1) then return end
+	local _, class = UnitClass("player")
+	if class ~= "HUNTER" or not db or db.noLevels or db.noPets or not InOurGuild() then return end
+	local owner, pet = UnitName("player"), Plain(UnitName("pet"))
+	if not pet or pet == "" or pet:find(";") then return end
+	local family = Plain(UnitCreatureFamily and UnitCreatureFamily("pet")) or ""
+	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
+		C_ChatInfo.SendAddonMessage(PREFIX, string.format("P;%s;%s;%d;%s", owner, pet, level, family), "GUILD")
+	end
+	local text = ShowPetLevel(owner, pet, level, family)
+	if text and db.guildChat then
+		C_Timer.After(2, function()
+			local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
+			if send and IsInGuild() then send(GuildLine(text, "Familjenytt"), "GUILD") end
+		end)
+	end
+end
+
 local function OnAddonMessage(prefix, msg, channel)
 	if prefix ~= PREFIX or channel ~= "GUILD" or not db or db.noLevels or not InOurGuild() then return end
 	if type(msg) ~= "string" or (issecretvalue and issecretvalue(msg)) then return end
-	local kind, name, level, classFile = strsplit(";", msg)
-	level = tonumber(level)
-	if kind ~= "L" or not name or name == "" or not level or name == UnitName("player") then return end
-	ShowLevel(name, level, classFile ~= "" and classFile or nil)
+	local kind, name, a, b, c = strsplit(";", msg)
+	if not name or name == "" or name == UnitName("player") then return end
+	if kind == "L" then
+		local level = tonumber(a)
+		if level then ShowLevel(name, level, b ~= "" and b or nil) end
+	elseif kind == "P" and not db.noPets then
+		local level = tonumber(b)
+		if a and a ~= "" and level then ShowPetLevel(name, a, level, c) end
+	end
 end
 
 -- Members with the addon already have the notice in their own chat; hide
@@ -315,14 +421,14 @@ end
 -- count, and Rättsmedicinalverket shortens long fields on the way), so an
 -- exact match is not enough: also hide a "Dödsannons:"/"Familjenytt:" line
 -- from someone we showed a notice for in the last minute.
-local function Plain(v)
+local function PlainText(v)
 	if type(v) ~= "string" or (issecretvalue and issecretvalue(v)) then return nil end
 	return v
 end
 
 if ChatFrame_AddMessageEventFilter then
 	ChatFrame_AddMessageEventFilter("CHAT_MSG_GUILD", function(_, _, msg, author)
-		msg, author = Plain(msg), Plain(author)
+		msg, author = PlainText(msg), PlainText(author)
 		if not db or db.quiet or not msg then return end
 		if ownCopy[msg] then return true end
 		local heading = msg:match("^(Dödsannons):") or msg:match("^(Familjenytt):")
@@ -345,10 +451,19 @@ events:RegisterEvent("ADDON_LOADED")
 events:RegisterEvent("PLAYER_LOGIN")
 events:RegisterEvent("PLAYER_LEVEL_UP")
 events:RegisterEvent("CHAT_MSG_ADDON")
+events:RegisterEvent("UNIT_PET")
+events:RegisterEvent("UNIT_LEVEL")
 events:SetScript("OnEvent", function(_, event, ...)
 	if event == "PLAYER_LOGIN" then
 		local register = C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix or RegisterAddonMessagePrefix
 		if register then register(PREFIX) end
+		ReadPet()
+		return
+	elseif event == "UNIT_PET" then
+		if ... == "player" then ReadPet() end
+		return
+	elseif event == "UNIT_LEVEL" then
+		if ... == "pet" then ReadPet() end
 		return
 	elseif event == "PLAYER_LEVEL_UP" then
 		OnLevelUp(...)
@@ -384,6 +499,16 @@ SlashCmdList.DODSANNONSER = function(msg)
 		db.noLevels = not db.noLevels
 		Print(db.noLevels and "nivåannonser är avstängda: du ser inga och skickar inga."
 			or "nivåannonser är på igen: gillet får veta när du går upp en nivå.")
+	elseif cmd == "husdjur" or cmd == "pet" then
+		db.noPets = not db.noPets
+		Print(db.noPets and "husdjurens nivåannonser är avstängda: du ser inga och skickar inga."
+			or "husdjurens nivåannonser är på igen: gillet får veta när ditt husdjur går upp en nivå.")
+	elseif cmd == "test husdjur" or cmd == "test pet" then
+		-- A preview in your own chat only; nothing is sent.
+		local pet = Plain(UnitName("pet")) or "Fluffy"
+		local family = Plain(UnitCreatureFamily and UnitCreatureFamily("pet")) or "Varg"
+		local level = (Plain(UnitLevel("pet")) or 23) + 1
+		DEFAULT_CHAT_FRAME:AddMessage(PAW .. " |cffffe28a" .. PetNotice(UnitName("player"), pet, level, family) .. "|r")
 	elseif cmd == "tyst" then
 		db.quiet = not db.quiet
 		Print(db.quiet and "annonser visas inte längre i chatten (dödsannonserna sparas ändå; /dodsannons visar dem)."
@@ -399,6 +524,6 @@ SlashCmdList.DODSANNONSER = function(msg)
 			DEFAULT_CHAT_FRAME:AddMessage(SKULL .. " |cff999999" .. Ago(n.time) .. ":|r " .. n.text)
 		end
 	else
-		Print("/dodsannons visar de senaste, /dodsannons tyst döljer nya i chatten, /dodsannons gillet skriver dina egna i gillechatten, /dodsannons nivå stänger av nivåannonserna.")
+		Print("/dodsannons visar de senaste, /dodsannons tyst döljer nya i chatten, /dodsannons gillet skriver dina egna i gillechatten, /dodsannons nivå stänger av nivåannonserna, /dodsannons husdjur stänger av husdjurens.")
 	end
 end

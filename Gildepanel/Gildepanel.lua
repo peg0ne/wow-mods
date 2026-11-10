@@ -845,6 +845,7 @@ local SETTINGS = {
 		{ key = "quiet", label = "Visa nya i chatten", invert = true },
 		{ key = "guildChat", label = "Skriv mina egna i gillechatten", default = true },
 		{ key = "noLevels", label = "Annonsera nya nivåer", invert = true },
+		{ key = "noPets", label = "Annonsera husdjurens nya nivåer", invert = true },
 	} },
 	{ addon = "Polisen", title = "Polisen", db = "PolisenDB", items = {
 		{ key = "alarm", label = "Varning på skärmen och ljud", default = true },
