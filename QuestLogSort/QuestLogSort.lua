@@ -98,11 +98,20 @@ local canSortTracker = Watch and Watch.GetNumQuestWatches and Watch.GetQuestIDFo
 	and Watch.AddQuestWatch and Watch.RemoveQuestWatch and Watch.IsComplete
 local trackerPending = false
 
+-- Levels by quest ID, so a quest the log can't look up right now (abandoned
+-- mid-update, or the log is busy in an instance) still sorts by its level.
+local levels = {}
+
+-- Watched quests that are still in the quest log. A quest that was just
+-- abandoned can linger in the watch list for a moment; it can't be watched
+-- again, so it is left out of the sort.
 local function WatchedQuests()
 	local ids = {}
 	for i = 1, Watch.GetNumQuestWatches() do
 		local id = Watch.GetQuestIDForQuestWatchIndex(i)
-		if id then ids[#ids + 1] = id end
+		if id and (not Watch.GetLogIndexForQuestID or Watch.GetLogIndexForQuestID(id)) then
+			ids[#ids + 1] = id
+		end
 	end
 	return ids
 end
@@ -112,14 +121,16 @@ local function Desired(ids)
 	for _, id in ipairs(ids) do
 		local index = Watch.GetLogIndexForQuestID and Watch.GetLogIndexForQuestID(id) or 9999
 		local info = Watch.GetInfo and Watch.GetInfo(index)
-		key[id] = { done = Watch.IsComplete(id) and 1 or 0, level = info and info.level or 0, index = index }
+		if info and info.questID == id and info.level and info.level > 0 then levels[id] = info.level end
+		key[id] = { done = Watch.IsComplete(id) and 1 or 0, level = levels[id] or 0, index = index }
 	end
 	local sorted = { unpack(ids) }
 	table.sort(sorted, function(a, b)
 		local ka, kb = key[a], key[b]
 		if ka.done ~= kb.done then return ka.done < kb.done end
 		if ka.level ~= kb.level then return ka.level < kb.level end
-		return ka.index < kb.index
+		if ka.index ~= kb.index then return ka.index < kb.index end
+		return a < b
 	end)
 	return sorted
 end
@@ -144,16 +155,24 @@ local function Rewatch(ids)
 	end
 end
 
-local function GiveUp()
-	canSortTracker = false
-	print("|cffff8040QuestLogSort:|r the quest tracker can't be sorted on this client; only the quest log will be.")
+-- An order that didn't come out right. It isn't tried again (re-watching
+-- fires another update, which would loop), but any change to the quests
+-- gives a new order, and that one is tried. A single failure used to stop
+-- tracker sorting for the whole session.
+local failedOrder = nil
+
+local function Signature(ids)
+	return table.concat(ids, ",")
 end
 
 local function SortTracker()
 	trackerPending = false
 	local ids = WatchedQuests()
+	if #ids < 2 then return end
 	local desired = Desired(ids)
-	if SameOrder(ids, desired) then return end
+	if SameOrder(ids, desired) then failedOrder = nil return end
+	local signature = Signature(desired)
+	if signature == failedOrder then return end
 
 	local superTracked = C_SuperTrack and C_SuperTrack.GetSuperTrackedQuestID and C_SuperTrack.GetSuperTrackedQuestID()
 
@@ -167,7 +186,7 @@ local function SortTracker()
 		elseif after[#after] == probe then
 			rewatchLandsAt = "last"
 		else
-			GiveUp()
+			failedOrder = signature
 			return
 		end
 	end
@@ -185,8 +204,11 @@ local function SortTracker()
 		C_SuperTrack.SetSuperTrackedQuestID(superTracked)
 	end
 
-	-- Never keep re-watching if the order still doesn't come out right.
-	if not SameOrder(WatchedQuests(), desired) then GiveUp() end
+	if SameOrder(WatchedQuests(), desired) then
+		failedOrder = nil
+	else
+		failedOrder = signature
+	end
 end
 
 local function QueueTrackerSort()
@@ -206,4 +228,7 @@ local trackerEvents = CreateFrame("Frame")
 trackerEvents:RegisterEvent("PLAYER_ENTERING_WORLD")
 trackerEvents:RegisterEvent("QUEST_LOG_UPDATE")
 trackerEvents:RegisterEvent("QUEST_WATCH_LIST_CHANGED")
+trackerEvents:RegisterEvent("QUEST_ACCEPTED")
+trackerEvents:RegisterEvent("QUEST_REMOVED")
+trackerEvents:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 trackerEvents:SetScript("OnEvent", QueueTrackerSort)

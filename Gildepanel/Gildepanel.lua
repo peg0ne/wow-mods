@@ -15,10 +15,19 @@
 -- 2.0 removed the panel because Skatteverket 0.22 shows the same figures in
 -- /skatt; 2.2 brought it back, since the compact bar that drops open is
 -- quicker to glance at than a full window.
+--
+-- 2.3 follows Skatteverket 0.28: standing is counted in play time on the
+-- whole account (8 h unpaid neutral, 12 h negative), and the best character
+-- on the account counts for all of them.
 
 local ADDON = ...
 local GUILD = "THÖNDERSTÖRM"
-local GOOD, NEGATIVE, WEEK = 48 * 3600, 7 * 86400, 7 * 86400
+-- Play time since the debt (Skatteverket 0.28 and later).
+local GOOD, NEGATIVE = 8 * 3600, 12 * 3600
+-- Real time since the debt, for members still on older Skatteverkets.
+local OLD_GOOD, OLD_NEGATIVE = 48 * 3600, 7 * 86400
+local WEEK = 7 * 86400
+local WARN_BEFORE = 3600
 local W, PAD = 300, 14
 local COMPACT_H = 52
 local MOTD_Y, SWEDBANK_H = -370, 114
@@ -80,13 +89,45 @@ local function SetVisible(region, on)
 	if on then region:Show() else region:Hide() end
 end
 
--- Same rule as Skatteverket: good up to 48 hours unpaid, neutral up to a week.
-local function Standing(m)
-	if not m or not m.debtSince then return "good" end
-	local age = time() - m.debtSince
-	if age <= GOOD then return "good" end
+-- A debt's age in play time as a standing, the way Skatteverket 0.28 counts.
+local function PlayStanding(age)
+	if not age or age <= GOOD then return "good" end
 	if age < NEGATIVE then return "neutral" end
 	return "negative"
+end
+
+-- Another member's standing. From 0.28 they report the account's debt age in
+-- play time (frozen while offline); older clients only the date of the debt.
+local function Standing(m)
+	if not m then return "good" end
+	if m.debtAge ~= nil then return PlayStanding(m.debtAge) end
+	if not m.debtSince then return "good" end
+	local age = time() - m.debtSince
+	if age <= OLD_GOOD then return "good" end
+	if age < OLD_NEGATIVE then return "neutral" end
+	return "negative"
+end
+
+-- Your account's standing, worked out from Skatteverket's saved data the way
+-- it does: every character on the account in SkatteverketDB.chars, the
+-- youngest debt among those that have paid tax (all of them if none has),
+-- aged by the account's play clock. Returns the debt's age in play time (0
+-- for none), or nil before Skatteverket 0.28.
+local function AccountDebt()
+	local sv = SkatteverketDB
+	if not sv or not sv.clock or type(sv.chars) ~= "table" then return nil end
+	local now = sv.clock
+	local function Best(paidOnly)
+		local debt
+		for _, c in pairs(sv.chars) do
+			if type(c) == "table" and (not paidOnly or (c.paid or 0) > 0) then
+				local age = (c.owed or 0) >= 1 and c.debtAt and math.max(0, now - c.debtAt) or 0
+				if not debt or age < debt then debt = age end
+			end
+		end
+		return debt
+	end
+	return Best(true) or Best(false) or 0
 end
 
 -- Names in the guild now, or nil before the roster loads.
@@ -129,7 +170,11 @@ local function Favorites(members, roster)
 			table.insert(list, name)
 		end
 	end
+	-- The longest run first: in play time where reported (0.28), else days.
+	local function Run(m) return m.goodAge or (time() - m.goodSince) end
 	table.sort(list, function(a, b)
+		local ra, rb = Run(members[a]), Run(members[b])
+		if ra ~= rb then return ra > rb end
 		local ga, gb = members[a].goodSince, members[b].goodSince
 		if ga ~= gb then return ga < gb end
 		return a < b
@@ -209,21 +254,36 @@ local function TaxState()
 	if not InGuild() then
 		return { note = "Den här karaktären är inte med i " .. GUILD .. "; inget beskattas.", short = "Inte med i gildet" }
 	end
-	local s = { c = c, owed = c.owed or 0, standing = Standing(c), ok = true }
-	s.debt = c.debtSince and s.owed >= 1 and (time() - c.debtSince) or nil
+	local s = { c = c, owed = c.owed or 0, ok = true }
+	local age = AccountDebt()
+	if age then
+		-- 0.28: the account's debt, in play time.
+		s.standing = PlayStanding(age)
+		s.debt = age > 0 and age or nil
+	else
+		s.standing = Standing(c)
+		s.debt = c.debtSince and s.owed >= 1 and (time() - c.debtSince) or nil
+		s.old = true
+	end
+	local good, negative = s.old and OLD_GOOD or GOOD, s.old and OLD_NEGATIVE or NEGATIVE
+	local played = s.old and "" or " speltid"
 	if s.debt then
 		if s.standing == "good" then
-			s.next = GOOD - s.debt
-			s.note = "Blir |cffffd100Neutral|r om " .. Duration(s.next) .. " om du inte betalar."
+			s.next = good - s.debt
+			s.note = "Blir |cffffd100Neutral|r om " .. Duration(s.next) .. played .. " om du inte betalar."
 			s.short = "Neutral om " .. Duration(s.next)
 		elseif s.standing == "neutral" then
-			s.next = NEGATIVE - s.debt
-			s.note = "Blir |cffff4040Negativ|r om " .. Duration(s.next) .. ". Besök gildebanken."
+			s.next = negative - s.debt
+			s.note = "Blir |cffff4040Negativ|r om " .. Duration(s.next) .. played .. ". Besök gildebanken."
 			s.short = "|cffff4040Negativ om " .. Duration(s.next) .. "|r"
 		else
-			s.note = "|cffff4040Obetald i " .. Duration(s.debt) .. ". Besök gildebanken.|r"
+			s.note = "|cffff4040Obetald i " .. Duration(s.debt) .. played .. ". Besök gildebanken.|r"
 			s.short = "|cffff4040Obetald i " .. Duration(s.debt) .. "|r"
 		end
+	elseif s.owed >= 1 then
+		-- Another character on the account has paid up, and it counts for all.
+		s.note = "Skyldig " .. Money(s.owed) .. ", men kontot ligger bra till."
+		s.short = "Kontot ligger bra till"
 	elseif s.owed <= -1 then
 		s.note = "Inget obetalt. Kredit hos gildet: " .. Money(-s.owed)
 		s.short = "Inget obetalt"
@@ -231,7 +291,7 @@ local function TaxState()
 		s.note = "Inget obetalt; du ligger bra till."
 		s.short = "Inget obetalt"
 	end
-	s.bar = s.debt and math.min(s.debt / NEGATIVE, 1) or 0
+	s.bar = s.debt and math.min(s.debt / negative, 1) or 0
 	s.color = COLORS[s.debt and s.standing or "none"]
 	return s
 end
@@ -681,7 +741,7 @@ local function BuildMini()
 		else
 			GameTooltip:AddDoubleLine("Ställning", LABELS[s.standing], 1, 1, 1)
 			GameTooltip:AddDoubleLine("Skyldig nu", Money(math.max(s.owed, 0)), 1, 1, 1, 1, 1, 1)
-			if s.next then GameTooltip:AddDoubleLine("Nästa steg ned om", Duration(s.next), 1, 1, 1, 1, 0.82, 0) end
+			if s.next then GameTooltip:AddDoubleLine(s.old and "Nästa steg ned om" or "Nästa steg ned om (speltid)", Duration(s.next), 1, 1, 1, 1, 0.82, 0) end
 		end
 		GameTooltip:AddLine(" ")
 		GameTooltip:AddLine("Vänsterklick: panelen   Högerklick: /skatt", 0.6, 0.6, 0.6)
@@ -944,19 +1004,24 @@ ToggleHub = function()
 end
 
 ------------------------------------------------------------------------
--- A heads-up in chat 6 hours before the standing drops a step.
+-- A heads-up in chat an hour of play before the standing drops a step.
 
 local warned = {}
 local function CheckWarning()
 	if db.warn == false then return end
 	local c = SkatteverketCharDB
-	if not c or not InGuild() or not c.debtSince or (c.owed or 0) < 1 then return end
-	local age = time() - c.debtSince
-	for _, step in ipairs({ { GOOD, "|cffffd100Neutral|r" }, { NEGATIVE, "|cffff4040Negativ|r" } }) do
-		local left, key = step[1] - age, c.debtSince .. ":" .. step[1]
-		if left > 0 and left <= 6 * 3600 and not warned[key] then
+	if not c or not InGuild() or (c.owed or 0) < 1 then return end
+	local s = TaxState()
+	if not s.debt then return end
+	-- Old Skatteverket: real time, warned 6 hours ahead.
+	local good, negative = s.old and OLD_GOOD or GOOD, s.old and OLD_NEGATIVE or NEGATIVE
+	local ahead = s.old and 6 * 3600 or WARN_BEFORE
+	local start = s.old and c.debtSince or floor(((SkatteverketDB and SkatteverketDB.clock) or 0) - s.debt)
+	for _, step in ipairs({ { good, "|cffffd100Neutral|r" }, { negative, "|cffff4040Negativ|r" } }) do
+		local left, key = step[1] - s.debt, floor(start / 60) .. ":" .. step[1]
+		if left > 0 and left <= ahead and not warned[key] then
 			warned[key] = true
-			Print(format("din ställning blir %s om %s. Betala %s vid gildebanken för att behålla den.", step[2], Duration(left), Money(c.owed)))
+			Print(format("din ställning blir %s om %s%s. Betala %s vid gildebanken för att behålla den.", step[2], Duration(left), s.old and "" or " speltid", Money(c.owed)))
 		end
 	end
 end
@@ -1046,7 +1111,7 @@ SlashCmdList.GILDEPANEL = function(msg)
 		ToggleHub()
 	elseif cmd == "varning" or cmd == "warn" then
 		db.warn = db.warn == false
-		Print(db.warn and "varnar 6 timmar innan ställningen sjunker." or "inga förvarningar.")
+		Print(db.warn and "varnar en timme speltid innan ställningen sjunker." or "inga förvarningar.")
 	else
 		Print("/gpanel visar panelen. /gpanel addons, /gpanel kompakt, /gpanel lås, /gpanel minimap, /gpanel skala 0.9, /gpanel återställ, /gpanel varning.")
 	end

@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Gildepanel
-## Notes: A compact bar for THÖNDERSTÖRM that drops open into a panel when you hover over it: your Skatteverket standing and tax, the guild's favourites, who is online, and your Swedbank loans. Also an Addons window that opens the other guild addons and toggles their automatic settings, and a chat warning 6 hours before your standing drops. Only reads what Skatteverket and Swedbank save; sends nothing.
-## Version: 2.2
+## Notes: A compact bar for THÖNDERSTÖRM that drops open into a panel when you hover over it: your Skatteverket standing and tax, the guild's favourites, who is online, and your Swedbank loans. Also an Addons window that opens the other guild addons and toggles their automatic settings, and a chat warning an hour of play before your standing drops. Only reads what Skatteverket and Swedbank save; sends nothing.
+## Version: 2.3
 ## OptionalDeps: Skatteverket, Swedbank
 ## SavedVariables: GildepanelDB
 Gildepanel.lua
