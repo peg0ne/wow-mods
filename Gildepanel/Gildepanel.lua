@@ -19,6 +19,9 @@
 --
 -- 2.5 celebrates a tax payment on screen and in sound (/gpanel firande).
 --
+-- 2.7 turns your minimap tracking (Find Herbs, Find Minerals) back on after
+-- login, since the game drops it (/gpanel spårning).
+--
 -- 2.3 follows Skatteverket 0.28: standing is counted in play time on the
 -- whole account (8 h unpaid neutral, 12 h negative), and the best character
 -- on the account counts for all of them.
@@ -863,6 +866,7 @@ local SETTINGS = {
 		{ key = "celebrateQuiet", label = "Med ljud", invert = true },
 		{ key = "compact", label = "Kompakt rad tills musen är över", default = true, slash = { "GILDEPANEL", "kompakt" } },
 		{ key = "hideMinimap", label = "Visa minimapknappen", invert = true, default = true, slash = { "GILDEPANEL", "minimap" } },
+		{ key = "keepTracking", label = "Behåll örter/malm-spårning vid inloggning", default = true },
 	} },
 }
 
@@ -1378,10 +1382,78 @@ local function CheckWarning()
 end
 
 ------------------------------------------------------------------------
+-- Minimap tracking (Find Herbs, Find Minerals, ...): the game can drop it at
+-- login. With db.keepTracking on (the default), the tracking spells you turn
+-- on are saved per character in db.tracking and turned on again a few
+-- seconds after login, and once more later in case the game or another
+-- addon changed it in between. Changes are not saved until the restore has
+-- run, so the reset state at login doesn't overwrite your choice.
+
+local trackingReady = false
+
+local function CharKey()
+	return (UnitName("player") or "?") .. "-" .. (GetRealmName() or "?")
+end
+
+local function NumTracking()
+	local f = C_Minimap and C_Minimap.GetNumTrackingTypes or GetNumTrackingTypes
+	local ok, n = pcall(f or error)
+	return ok and tonumber(n) or 0
+end
+
+-- name, active, isSpell for tracking type i.
+local function TrackingInfo(i)
+	if C_Minimap and C_Minimap.GetTrackingInfo then
+		local ok, a, _, c, d = pcall(C_Minimap.GetTrackingInfo, i)
+		if not ok then return end
+		if type(a) == "table" then
+			return a.name, a.active, a.type == nil or a.type == "spell"
+		end
+		return a, c, d == nil or d == "spell"
+	elseif GetTrackingInfo then
+		local ok, name, _, active, kind = pcall(GetTrackingInfo, i)
+		if ok then return name, active, kind == nil or kind == "spell" end
+	end
+end
+
+local function SetTrackingOn(i)
+	local f = C_Minimap and C_Minimap.SetTracking or SetTracking
+	if f then pcall(f, i, true) end
+end
+
+local function SaveTracking()
+	if not trackingReady or db.keepTracking == false then return end
+	local on = {}
+	for i = 1, NumTracking() do
+		local name, active, isSpell = TrackingInfo(i)
+		if name and active and isSpell then table.insert(on, name) end
+	end
+	db.tracking = db.tracking or {}
+	db.tracking[CharKey()] = on
+end
+
+local function RestoreTracking()
+	if db.keepTracking == false then return end
+	local want = db.tracking and db.tracking[CharKey()]
+	if not want or #want == 0 then return end
+	if UnitIsDeadOrGhost("player") then return end
+	for _, wanted in ipairs(want) do
+		for i = 1, NumTracking() do
+			local name, active = TrackingInfo(i)
+			if name == wanted then
+				if not active then SetTrackingOn(i) end
+				break
+			end
+		end
+	end
+end
+
+------------------------------------------------------------------------
 
 local events = CreateFrame("Frame")
 for _, event in ipairs({
 	"ADDON_LOADED", "PLAYER_LOGIN", "GUILD_ROSTER_UPDATE", "PLAYER_MONEY", "PLAYER_GUILD_UPDATE",
+	"MINIMAP_UPDATE_TRACKING",
 	"GUILDBANKFRAME_OPENED", "GUILDBANKFRAME_CLOSED",
 	"PLAYER_INTERACTION_MANAGER_FRAME_SHOW", "PLAYER_INTERACTION_MANAGER_FRAME_HIDE",
 }) do
@@ -1400,6 +1472,12 @@ events:SetScript("OnEvent", function(_, event, arg)
 	if event == "PLAYER_LOGIN" then
 		BuildMini()
 		if db.cameraMax then SetCamera(db.cameraMax) end
+		C_Timer.After(3, RestoreTracking)
+		C_Timer.After(10, function()
+			RestoreTracking()
+			-- Let the game catch up before saving changes again.
+			C_Timer.After(2, function() trackingReady = true SaveTracking() end)
+		end)
 		-- Open unless closed last time; without the minimap button it is the way in.
 		if db.shown ~= false then OpenPanel() end
 		C_Timer.NewTicker(5, function() RefreshMini() end)
@@ -1407,6 +1485,9 @@ events:SetScript("OnEvent", function(_, event, arg)
 		C_Timer.After(25, CheckWarning)
 		Snapshot()
 		C_Timer.NewTicker(1, function() if not checking then Snapshot() end end)
+		return
+	elseif event == "MINIMAP_UPDATE_TRACKING" then
+		SaveTracking()
 		return
 	elseif event == "GUILD_ROSTER_UPDATE" or event == "PLAYER_GUILD_UPDATE" then
 		guildDirty = true
@@ -1495,10 +1576,15 @@ SlashCmdList.GILDEPANEL = function(msg)
 			db.celebrate = db.celebrate == false
 			Print(db.celebrate and "firar när du betalar skatt. Prova med /gpanel firande test." or "inget firande när du betalar skatt.")
 		end
+	elseif cmd == "spårning" or cmd == "tracking" then
+		db.keepTracking = db.keepTracking == false
+		if db.keepTracking then SaveTracking() end
+		Print(db.keepTracking and "spårningen (örter, malm ...) slås på igen när du loggar in." or "spårningen lämnas som spelet sätter den vid inloggning.")
+		if hub and hub:IsShown() then RefreshHub() end
 	elseif cmd == "varning" or cmd == "warn" then
 		db.warn = db.warn == false
 		Print(db.warn and "varnar en timme speltid innan ställningen sjunker." or "inga förvarningar.")
 	else
-		Print("/gpanel visar panelen. /gpanel addons, /gpanel kompakt, /gpanel lås, /gpanel minimap, /gpanel kamera 2.6, /gpanel skala 0.9, /gpanel återställ, /gpanel varning.")
+		Print("/gpanel visar panelen. /gpanel addons, /gpanel kompakt, /gpanel lås, /gpanel minimap, /gpanel kamera 2.6, /gpanel skala 0.9, /gpanel återställ, /gpanel varning, /gpanel spårning.")
 	end
 end
