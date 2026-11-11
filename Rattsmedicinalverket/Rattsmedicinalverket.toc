@@ -1,5 +1,7 @@
 ## Interface: 16001
 ## Title: Rättsmedicinalverket
+## Category: THÖNDERSTÖRM
+## IconTexture: Interface\Icons\INV_Misc_Spyglass_02
 ## Notes: Death records for THÖNDERSTÖRM: works out what killed you (killing blow, hostile players who hit you in the last 10 s, falling, drowning ...) and tells the guild. Other addons (Polisen) build on it; it shows nothing itself.
 ## Version: 0.4
 ## SavedVariables: RattsmedicinalverketDB

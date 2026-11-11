@@ -1,5 +1,7 @@
 ## Interface: 16001
 ## Title: Revisorsinspektionen
+## Category: THÖNDERSTÖRM
+## IconTexture: Interface\Icons\INV_Misc_Book_11
 ## Notes: Checks Bokföring's books: dims recipes under your markup limit and adds the profit after Skatteverket's guild tax to Bokföring's recipe tooltips. Changes nothing in Bokföring or Skatteverket.
 ## Version: 0.1
 ## OptionalDeps: Bokforing, Skatteverket

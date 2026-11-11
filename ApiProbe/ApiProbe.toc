@@ -1,5 +1,7 @@
 ## Interface: 16001
 ## Title: ApiProbe (dev)
+## Category: Development Tools
+## IconTexture: Interface\Icons\INV_Misc_Gear_01
 ## Notes: Development tool: records which game API functions this client has, into SavedVariables, so addons can be written for it. /probe prints a summary. Safe to disable.
 ## Version: 0.1
 ## SavedVariables: ApiProbeDB

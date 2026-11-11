@@ -1,5 +1,7 @@
 ## Interface: 16001
 ## Title: Postnord
+## Category: THÖNDERSTÖRM
+## IconTexture: Interface\Icons\INV_Letter_15
 ## Notes: Tells you in chat when a guildmate runs a newer version of the THÖNDERSTÖRM addon pack, so you know to update in WowUp. Shares only the pack's version number with the guild.
 ## Version: dev
 ## SavedVariables: PostnordDB
