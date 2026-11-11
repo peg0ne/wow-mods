@@ -59,6 +59,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Handlaggaren | 0.2 | Built, not yet tested in game |
 | SCB | 0.3 | Roster export works in game; the rest is not yet tested. 0.3 saves the whole guild roster (rank, class, level, notes, last online) to `SCBDB.roster` |
 | Kolapp | 0.3 | Works in game (quest tracker numbers); 0.3 adds the quest on item tooltips, not yet tested in game |
+| Revisorsinspektionen | 0.1 | Built, not yet tested in game |
 
 ## Accepted ideas
 
@@ -135,6 +136,13 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 - For a copy in the bags, `C_Container.GetContainerItemQuestInfo` names the quest the item starts or belongs to, whatever its category (Venture Co. Work Order is Miscellaneous and missing from Questie's data).
 - Quest items still unexplained are looked up in the text of the quests in your log ("Nämns i: …"); reading that text selects each quest in turn and puts the old selection back. An item still unknown shows "Kölapp: okänt questföremål (ID …)".
 - Ideas for later: numbers in the NPC's quest list (gossip frame).
+
+### Revisorsinspektionen: Bokföring after guild tax (built, v0.1)
+- Bokföring (Zach's, in the AddOns folder only) subtracts the AH's 5% cut but not Skatteverket's tax, which is taken on the whole sale mail (price less the cut, plus the deposit back). A sale keeps about 0.95 × 0.95 = 90.25% of the listing price, so a craft needs about 10.8% markup on materials to break even.
+- Never changes Bokföring or Skatteverket: it reads `SkatteverketDB.rate` and the `row.data` that Bokföring puts on the row buttons of its global `BokforingFrame` (`cost`, `sells` after the cut, `sold`, `recipe`).
+- With Bokföring's window open, it dims recipes whose markup on the listing price is under the limit (12% by default) or that lose money after tax, and adds lines to the recipe tooltip: profit after tax, the tax, profit a day after tax, the markup and the break-even listing price.
+- `/revisor` shows the settings, `/revisor gräns 12` sets the limit, `/revisor dämpa` and `/revisor tips` toggle dimming and the tooltip lines. The two toggles are also in Gildepanel's Addons window (`/gpanel addons`, Gildepanel 2.8); the limit is only a command.
+- Not counted: the tax on the deposit (Bokföring doesn't know it) and the deposit lost on a relist.
 
 ### Utmärkelser: homemade achievements (social)
 - This client has no achievements. Events trigger them: `PLAYER_LEVEL_UP`, looting an epic, profession reaching 300, `UPDATE_FACTION` (exalted), first mount, boss kills (`UNIT_DIED` in the combat log), a run without dying.

@@ -22,6 +22,9 @@
 -- 2.7 turns your minimap tracking (Find Herbs, Find Minerals) back on after
 -- login, since the game drops it (/gpanel spårning).
 --
+-- 2.8 lists Revisorsinspektionen's settings in the Addons window, which is
+-- now wider, with its settings in two columns.
+--
 -- 2.3 follows Skatteverket 0.28: standing is counted in play time on the
 -- whole account (8 h unpaid neutral, 12 h negative), and the best character
 -- on the account counts for all of them.
@@ -857,6 +860,11 @@ local SETTINGS = {
 	{ addon = "Arbetsformedlingen", title = "Arbetsförmedlingen", db = "ArbetsformedlingenCharDB", items = {
 		{ key = "quiet", label = "Visa nya annonser i chatten", invert = true },
 	} },
+	-- The markup limit itself is a number: /revisor gräns 12.
+	{ addon = "Revisorsinspektionen", title = "Revisorsinspektionen", db = "RevisorsinspektionenDB", items = {
+		{ key = "dim", label = "Dämpa recept under påslagsgränsen", default = true },
+		{ key = "tooltip", label = "Vinst efter skatt i Bokföringens tips", default = true },
+	} },
 	{ addon = "Eniro", title = "Eniro", db = "EniroCharDB", items = {
 		{ key = "share", label = "Dela min position med gillet", slash = { "ENIRO", "dela" } },
 	} },
@@ -964,7 +972,8 @@ local function Panel(name, titleText)
 end
 
 local function BuildHub()
-	local HW = 320
+	-- Wide, with the settings in two columns (2.8): one column grew too tall.
+	local HW = 620
 	local classic
 	hub, classic = Panel("GildepanelHub", GUILD)
 	hub:SetWidth(HW)
@@ -996,17 +1005,18 @@ local function BuildHub()
 	Text(hub, "GameFontNormal", "TOPLEFT", classic and 66 or PAD, -34):SetText("Addons")
 	local top = classic and -66 or -34
 
-	-- Windows, two buttons a row.
+	-- Windows, four buttons a row.
 	Section(hub, "Fönster", top)
 	hub.windows = {}
-	local bw = (HW - 2 * PAD - 8) / 2
+	local PER_ROW = 4
+	local bw = (HW - 2 * PAD - 8 * (PER_ROW - 1)) / PER_ROW
 	local y = top - 24
 	for i, w in ipairs(WINDOWS) do
 		local b = Button(hub, w[2], bw, function() RunSlash(w[3], w[4] or "", w[2]) end)
 		b.addon, b.key = w[1], w[3]
-		local col = (i - 1) % 2
+		local col = (i - 1) % PER_ROW
 		b:SetPoint("TOPLEFT", PAD + col * (bw + 8), y)
-		if col == 1 or i == #WINDOWS then y = y - 26 end
+		if col == PER_ROW - 1 or i == #WINDOWS then y = y - 26 end
 		table.insert(hub.windows, b)
 	end
 
@@ -1077,19 +1087,30 @@ local function BuildHub()
 	end
 	y = y - 22
 
-	-- Automatic settings, grouped by addon.
+	-- Automatic settings, grouped by addon, in two columns: the groups in
+	-- order, the second column starting once the first holds half.
 	y = y - 10
 	Section(hub, "Automatik", y)
 	y = y - 24
 	hub.groups = {}
+	local function GroupHeight(group) return 16 + 20 * #group.items + 6 end
+	local total = 0
+	for _, group in ipairs(SETTINGS) do total = total + GroupHeight(group) end
+	local colW = (HW - 2 * PAD) / 2
+	local top2, x, used, lowest = y, PAD, 0, y
 	for _, group in ipairs(SETTINGS) do
+		local h = GroupHeight(group)
+		if x == PAD and used > 0 and used + h / 2 > total / 2 then
+			x, y = PAD + colW, top2
+		end
+		used = used + h
 		local row = { group = group, boxes = {} }
-		row.header = Text(hub, "GameFontNormalSmall", "TOPLEFT", PAD, y)
+		row.header = Text(hub, "GameFontNormalSmall", "TOPLEFT", x, y)
 		y = y - 16
 		for _, item in ipairs(group.items) do
 			local cb = CreateFrame("CheckButton", nil, hub, "UICheckButtonTemplate")
 			cb:SetSize(22, 22)
-			cb:SetPoint("TOPLEFT", PAD + 4, y + 3)
+			cb:SetPoint("TOPLEFT", x + 4, y + 3)
 			cb.item = item
 			cb.label = Text(hub, "GameFontHighlightSmall", "LEFT", cb, "RIGHT", 2, 1)
 			cb.label:SetText(item.label)
@@ -1101,9 +1122,10 @@ local function BuildHub()
 			y = y - 20
 		end
 		y = y - 6
+		lowest = math.min(lowest, y)
 		table.insert(hub.groups, row)
 	end
-	hub:SetHeight(-y + (classic and 28 or 8))
+	hub:SetHeight(-lowest + (classic and 28 or 8))
 
 	-- Slash commands can change a setting while the window is open.
 	hub:SetScript("OnShow", RefreshHub)
