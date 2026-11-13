@@ -883,6 +883,11 @@ local SETTINGS = {
 		{ key = "dim", label = "Dämpa recept under påslagsgränsen", default = true },
 		{ key = "tooltip", label = "Vinst efter skatt i Bokföringens tips", default = true },
 	} },
+	-- trackerMode is "zone" or nil; any value counts as checked.
+	{ addon = "QuestLogSort", title = "QuestLogSort", db = "QuestLogSortDB", items = {
+		{ key = "disabled", label = "Sortera questlogg och tracker", invert = true, slash = { "QUESTLOGSORT", "på", "av" } },
+		{ key = "trackerMode", label = "Trackern zon för zon", slash = { "QUESTLOGSORT", "zon", "nivå" } },
+	} },
 	{ addon = "Eniro", title = "Eniro", db = "EniroCharDB", items = {
 		{ key = "share", label = "Dela min position med gillet", slash = { "ENIRO", "dela" } },
 	} },
@@ -913,8 +918,13 @@ end
 
 local function SetSetting(group, item, on)
 	if item.slash then
-		-- The command toggles; run it only if the value is not already right.
-		if SettingValue(group, item) ~= on then RunSlash(item.slash[1], item.slash[2], group.title) end
+		-- { key, toggle } or { key, turn on, turn off }. Run it only if the
+		-- value is not already right.
+		if SettingValue(group, item) ~= on then
+			local msg = item.slash[2]
+			if item.slash[3] and not on then msg = item.slash[3] end
+			RunSlash(item.slash[1], msg, group.title)
+		end
 		return
 	end
 	local t = _G[group.db]
