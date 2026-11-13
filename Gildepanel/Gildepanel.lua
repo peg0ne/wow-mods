@@ -180,9 +180,15 @@ local function Favorites(members, roster)
 		end
 	end
 	-- The longest run first: in play time where reported (0.28), else days.
-	local function Run(m) return m.goodAge or (time() - m.goodSince) end
+	-- Worked out once before sorting: a time() read inside the comparator can
+	-- tick over mid-sort and make the order inconsistent.
+	local now, run = time(), {}
+	for _, name in ipairs(list) do
+		local m = members[name]
+		run[name] = m.goodAge or (now - m.goodSince)
+	end
 	table.sort(list, function(a, b)
-		local ra, rb = Run(members[a]), Run(members[b])
+		local ra, rb = run[a], run[b]
 		if ra ~= rb then return ra > rb end
 		local ga, gb = members[a].goodSince, members[b].goodSince
 		if ga ~= gb then return ga < gb end
@@ -361,6 +367,7 @@ local function Bar(parent, width, height)
 	SetColor(tick, 1, 1, 1, 0.7)
 	tick:SetSize(2, height + 4)
 	tick:SetPoint("CENTER", bar, "LEFT", width * GOOD / NEGATIVE, 0)
+	bar.tick, bar.width = tick, width
 	return bar
 end
 
@@ -461,7 +468,8 @@ local function Build()
 	body.rate:SetPoint("TOPRIGHT", -PAD, -61)
 	body.note = Text(body, "GameFontHighlightSmall", "TOPLEFT", PAD, -82)
 	body.note:SetWidth(W - 2 * PAD)
-	-- Debt age: the bar fills over a week, with a mark where 48 hours ends.
+	-- Debt age: the bar fills up to negative standing, with a mark where good
+	-- standing ends (8 of 12 hours' play; 48 hours of a week on old Skatteverket).
 	body.bar = Bar(body, W - 2 * PAD, 10)
 	body.bar:SetPoint("TOPLEFT", PAD, -100)
 	body.owed = Pair(body, -118, "Skyldig nu")
@@ -544,6 +552,13 @@ local function FitHeight()
 	if math.abs(frame:GetHeight() - height) > 0.5 then frame:SetHeight(height) end
 end
 
+-- The mark where good standing ends; old Skatteverket counts days, not play.
+local function PlaceTick(bar, s)
+	local at = s.old and OLD_GOOD / OLD_NEGATIVE or GOOD / NEGATIVE
+	bar.tick:ClearAllPoints()
+	bar.tick:SetPoint("CENTER", bar, "LEFT", bar.width * at, 0)
+end
+
 local function RefreshTax(s)
 	local compact, body = frame.compact, frame.body
 	local standing = StandingText(s)
@@ -552,11 +567,13 @@ local function RefreshTax(s)
 	compact.note:SetText(s.short)
 	compact.bar:SetValue(s.bar or 0)
 	if s.color then compact.bar:SetStatusBarColor(s.color[1], s.color[2], s.color[3]) end
+	PlaceTick(compact.bar, s)
 	if not expanded then return end
 
 	body.standing:SetText(standing)
 	body.note:SetText(s.note)
 	body.bar:SetValue(s.bar or 0)
+	PlaceTick(body.bar, s)
 	if s.color then body.bar:SetStatusBarColor(s.color[1], s.color[2], s.color[3]) end
 	if not s.ok then
 		body.rate:SetText("")
@@ -1552,10 +1569,19 @@ SlashCmdList.GILDEPANEL = function(msg)
 	elseif cmd == "skala" or cmd == "scale" then
 		local s = tonumber((rest:gsub(",", ".")))
 		if not s or s < 0.5 or s > 2 then Print("så här: /gpanel skala 0.9 (mellan 0.5 och 2)") return end
+		local old = db.scale or 1
 		db.scale = s
+		-- The saved corner is in the frame's own scaled units: convert it so
+		-- the panel stays on the same spot of the screen.
+		if db.pos and db.pos[1] == "TOPLEFT" and db.pos[2] == "BOTTOMLEFT" then
+			db.pos[3], db.pos[4] = db.pos[3] * old / s, db.pos[4] * old / s
+		end
 		if frame then
 			frame:SetScale(s)
-			if frame:IsShown() then SavePosition() end
+			if db.pos then
+				frame:ClearAllPoints()
+				frame:SetPoint(db.pos[1], UIParent, db.pos[2], db.pos[3], db.pos[4])
+			end
 		end
 	elseif cmd == "återställ" or cmd == "reset" then
 		db.pos, db.scale = nil, 1
