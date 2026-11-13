@@ -164,30 +164,40 @@ end
 
 -- Each quest's zone as the position of its header in the quest log, so
 -- zones keep the order the log shows them in.
+-- Also returns the zone names, by that position.
 local function ZoneOrder()
-	local zones = {}
-	if not (Watch.GetNumQuestLogEntries and Watch.GetInfo) then return zones end
+	local zones, names = {}, {}
+	if not (Watch.GetNumQuestLogEntries and Watch.GetInfo) then return zones, names end
 	local header = 0
 	for i = 1, (Watch.GetNumQuestLogEntries()) do
 		local info = Watch.GetInfo(i)
 		if info and info.isHeader then
 			header = header + 1
+			names[header] = info.title
 		elseif info and info.questID then
 			zones[info.questID] = header
 		end
 	end
-	return zones
+	return zones, names
+end
+
+-- The zone you are in comes first: its quest log header has the zone's name.
+local function ZoneRank(z, names)
+	local here = GetRealZoneText and GetRealZoneText()
+	if here and here ~= "" and names[z] == here then return 0 end
+	return z
 end
 
 local function Desired(ids)
 	local key = {}
-	local zones = ByZone() and ZoneOrder() or nil
+	local zones, names
+	if ByZone() then zones, names = ZoneOrder() end
 	for _, id in ipairs(ids) do
 		local index = Watch.GetLogIndexForQuestID and Watch.GetLogIndexForQuestID(id) or 9999
 		local info = Watch.GetInfo and Watch.GetInfo(index)
 		if info and info.questID == id and info.level and info.level > 0 then levels[id] = info.level end
 		key[id] = { done = Watch.IsComplete(id) and 1 or 0, level = levels[id] or 0, index = index,
-			zone = zones and zones[id] or 0 }
+			zone = zones and zones[id] and ZoneRank(zones[id], names) or 0 }
 	end
 	local sorted = { unpack(ids) }
 	table.sort(sorted, function(a, b)
@@ -319,9 +329,314 @@ trackerEvents:SetScript("OnEvent", function(_, event)
 	QueueTrackerSort()
 end)
 
+-- Zone lines in the tracker, in zone mode: the first quest of each zone gets
+-- the zone's name and a line above it. Blizzard works out a block's height
+-- when it sets the block's title, so right after that the title is moved
+-- down and the height grows by the same amount: the tracker then makes room
+-- by itself. The quest item buttons are never touched.
+--
+-- Clicking a zone line folds the zone up: its quests are unwatched (only
+-- through the quest API, like the sorting) and remembered per character,
+-- and the zone stays as a line "+ Westfall (3)" in the gap above the next
+-- zone, or below the last quest. Clicking that watches them again. A quest
+-- in a folded zone that gets watched (a new quest, or the game watching one
+-- that made progress) is folded away with the rest.
+--
+-- Changing the height is a write into Blizzard's data, so it is only done
+-- out of combat; a tracker update in combat puts the title back and the
+-- gap disappears until the next update after combat. Folding waits for
+-- combat to end too.
+local ROW, SPACE = 16, 8
+local saved = setmetatable({}, { __mode = "k" }) -- block -> the title's own anchors
+local lines = setmetatable({}, { __mode = "k" }) -- block -> its zone line frames
+
 local function Say(text)
 	print("|cff80c0ffQuestLogSort:|r " .. text)
 end
+
+local function CharDB()
+	QuestLogSortCharDB = QuestLogSortCharDB or {}
+	local c = QuestLogSortCharDB
+	c.collapsed = c.collapsed or {} -- zone name -> true
+	c.hidden = c.hidden or {}       -- quest ID -> zone name, unwatched by folding
+	return c
+end
+
+-- Folded zones and how many quests each holds.
+local function Folded()
+	local c, counts = CharDB(), {}
+	for _, zone in pairs(c.hidden) do
+		if c.collapsed[zone] then counts[zone] = (counts[zone] or 0) + 1 end
+	end
+	for zone in pairs(c.collapsed) do
+		if not counts[zone] then c.collapsed[zone] = nil end
+	end
+	return counts
+end
+
+local busy = false -- folding or unfolding: our own watch changes
+local function Fold(zone)
+	local c = CharDB()
+	local zones, names = ZoneOrder()
+	busy = true
+	c.collapsed[zone] = true
+	for _, id in ipairs(WatchedQuests()) do
+		if names[zones[id]] == zone then
+			c.hidden[id] = zone
+			Watch.RemoveQuestWatch(id)
+		end
+	end
+	busy = false
+	if #WatchedQuests() == 0 then
+		Say("alla zoner är ihopfällda och trackern är tom. /qls öppna visar dem igen.")
+	end
+end
+
+local function Unfold(zone)
+	local c = CharDB()
+	busy = true
+	c.collapsed[zone] = nil
+	for id, z in pairs(c.hidden) do
+		if z == zone then
+			c.hidden[id] = nil
+			if not Watch.GetLogIndexForQuestID or Watch.GetLogIndexForQuestID(id) then Watch.AddQuestWatch(id) end
+		end
+	end
+	busy = false
+end
+
+-- Opens every folded zone: /qls öppna, and when zone mode or the addon is
+-- turned off. Waits for combat to end.
+local unfoldAll, toggles = false, {}
+local function UnfoldAll()
+	if not ready then return end
+	if InCombat() then unfoldAll = true return end
+	local zones = {}
+	for _, zone in pairs(CharDB().hidden) do zones[zone] = true end
+	for zone in pairs(CharDB().collapsed) do zones[zone] = true end
+	for zone in pairs(zones) do Unfold(zone) end
+end
+
+local function ToggleZone(zone)
+	if InCombat() then
+		toggles[zone] = not toggles[zone] or nil
+		Say("zonen fälls " .. (CharDB().collapsed[zone] and "ut" or "ihop") .. " när striden är över.")
+		return
+	end
+	if CharDB().collapsed[zone] then Unfold(zone) else Fold(zone) end
+end
+
+-- Watched quests that belong in a folded zone go back into it.
+local function Refold()
+	if busy or not ready or InCombat() or not (Enabled() and ByZone()) then return end
+	local c = CharDB()
+	if not next(c.collapsed) then return end
+	local zones, names = ZoneOrder()
+	busy = true
+	for _, id in ipairs(WatchedQuests()) do
+		local zone = names[zones[id]]
+		if zone and c.collapsed[zone] then
+			c.hidden[id] = zone
+			Watch.RemoveQuestWatch(id)
+		end
+	end
+	busy = false
+end
+
+local foldEvents = CreateFrame("Frame")
+foldEvents:RegisterEvent("QUEST_WATCH_LIST_CHANGED")
+foldEvents:RegisterEvent("QUEST_REMOVED")
+foldEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
+foldEvents:SetScript("OnEvent", function(_, event, id)
+	if not ready then return end
+	if event == "QUEST_REMOVED" then
+		if id then CharDB().hidden[id] = nil end
+	elseif event == "PLAYER_REGEN_ENABLED" then
+		if unfoldAll then
+			unfoldAll = false
+			wipe(toggles)
+			UnfoldAll()
+		end
+		for zone in pairs(toggles) do ToggleZone(zone) end
+		wipe(toggles)
+		Refold()
+	elseif not busy then
+		-- Once the change has settled.
+		C_Timer.After(0, function() pcall(Refold) end)
+	end
+end)
+
+-- What each block shows, worked out once per frame (every block in one
+-- tracker update asks): quest ID -> { name, above = folded zones over it,
+-- gap, below = folded zones under the last quest, extra }.
+local plan, planAt = nil, nil
+local function Plan()
+	local now = GetTime()
+	if plan and planAt == now then return plan end
+	plan, planAt = {}, now
+	local zones, names = ZoneOrder()
+	local rank = {}
+	for i, name in pairs(names) do
+		local r = ZoneRank(i, names)
+		if not rank[name] or r < rank[name] then rank[name] = r end
+	end
+	local rows = {}
+	for zone, count in pairs(Folded()) do
+		rows[#rows + 1] = { name = zone, count = count, rank = rank[zone] or math.huge }
+	end
+	table.sort(rows, function(a, b)
+		if a.rank ~= b.rank then return a.rank < b.rank end
+		return a.name < b.name
+	end)
+	local nextRow, last, lastID, shown = 1, nil, nil, 0
+	for _, id in ipairs(WatchedQuests()) do
+		local z = zones[id]
+		if z then
+			if z ~= last and names[z] then
+				local entry = { name = names[z], above = {} }
+				local r = ZoneRank(z, names)
+				while rows[nextRow] and rows[nextRow].rank < r do
+					entry.above[#entry.above + 1] = rows[nextRow]
+					nextRow = nextRow + 1
+				end
+				entry.gap = (shown > 0 and SPACE or 0) + ROW * (#entry.above + 1)
+				plan[id] = entry
+				shown = shown + 1
+			end
+			last, lastID = z, id
+		end
+	end
+	if lastID and rows[nextRow] then
+		local entry = plan[lastID] or { above = {} }
+		entry.below = {}
+		while rows[nextRow] do
+			entry.below[#entry.below + 1] = rows[nextRow]
+			nextRow = nextRow + 1
+		end
+		entry.extra = SPACE + ROW * #entry.below
+		plan[lastID] = entry
+	end
+	return plan
+end
+
+local function ZoneLine(block, i)
+	local list = lines[block]
+	if not list then
+		list = {}
+		lines[block] = list
+	end
+	local line = list[i]
+	if line then return line end
+	line = CreateFrame("Frame", nil, block)
+	line:SetHeight(ROW - 2)
+	line:EnableMouse(true)
+	line.text = line:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	line.text:SetPoint("LEFT")
+	line.rule = line:CreateTexture(nil, "ARTWORK")
+	line.rule:SetHeight(1)
+	if line.rule.SetColorTexture then line.rule:SetColorTexture(1, 0.82, 0, 0.35) end
+	line.rule:SetPoint("LEFT", line.text, "RIGHT", 6, 0)
+	line.rule:SetPoint("RIGHT")
+	line:SetScript("OnEnter", function(self) self.text:SetTextColor(1, 1, 1) end)
+	line:SetScript("OnLeave", function(self) self.text:SetTextColor(1, 0.82, 0) end)
+	line:SetScript("OnMouseUp", function(self) if self.zone then ToggleZone(self.zone) end end)
+	list[i] = line
+	return line
+end
+
+local function ShowLine(line, zone, count)
+	line.zone = zone
+	if count then
+		line.text:SetText("+ " .. zone .. " |cffa0a0a0(" .. count .. ")|r")
+	else
+		line.text:SetText("- " .. zone)
+	end
+	line.text:SetTextColor(1, 0.82, 0)
+	line:Show()
+end
+
+local function PutBack(block)
+	if lines[block] then
+		for _, line in ipairs(lines[block]) do line:Hide() end
+	end
+	local points = saved[block]
+	if not points then return end
+	saved[block] = nil
+	block.HeaderText:ClearAllPoints()
+	for _, p in ipairs(points) do block.HeaderText:SetPoint(unpack(p)) end
+end
+
+local function OnHeader(block)
+	local header = block and block.HeaderText
+	if not (header and header.GetNumPoints) then return end
+	-- Each update starts from where Blizzard puts the title.
+	PutBack(block)
+	if not (Enabled() and ByZone()) or InCombat() or type(block.height) ~= "number" then return end
+	local id = block.poiQuestID or block.questID or block.id
+	local entry = type(id) == "number" and Plan()[id]
+	if not entry then return end
+	local n = 0
+	if entry.name then
+		local points = {}
+		for i = 1, header:GetNumPoints() do points[i] = { header:GetPoint(i) } end
+		if #points == 0 then return end
+		saved[block] = points
+		header:ClearAllPoints()
+		for _, p in ipairs(points) do header:SetPoint(p[1], p[2], p[3], p[4] or 0, (p[5] or 0) - entry.gap) end
+		block.height = block.height + entry.gap
+		-- Bottom up: this zone's line, then the folded zones above it.
+		local stack = { { entry.name } }
+		for i = #entry.above, 1, -1 do stack[#stack + 1] = { entry.above[i].name, entry.above[i].count } end
+		for k, row in ipairs(stack) do
+			n = n + 1
+			local line = ZoneLine(block, n)
+			line:ClearAllPoints()
+			line:SetPoint("BOTTOMLEFT", header, "TOPLEFT", 0, 2 + ROW * (k - 1))
+			line:SetPoint("RIGHT", block, "RIGHT")
+			ShowLine(line, row[1], row[2])
+		end
+	end
+	if entry.below then
+		-- Folded zones after the last quest, in the space added at the bottom.
+		block.height = block.height + entry.extra
+		local hl, bl = header:GetLeft(), block:GetLeft()
+		local indent = (hl and bl) and (hl - bl) or 0
+		for i, row in ipairs(entry.below) do
+			n = n + 1
+			local line = ZoneLine(block, n)
+			line:ClearAllPoints()
+			line:SetPoint("BOTTOMLEFT", block, "BOTTOMLEFT", indent, ROW * (#entry.below - i))
+			line:SetPoint("RIGHT", block, "RIGHT")
+			ShowLine(line, row.name, row.count)
+		end
+	end
+end
+
+-- Same hooks as Kolapp: every *BlockMixin's SetHeader, and older trackers'
+-- SetBlockHeader. Blocks copy the mixin when they are made, so this has to
+-- run before the tracker makes any.
+local hookedTables = {}
+local function HookTracker()
+	for name, value in pairs(_G) do
+		if type(value) == "table" and type(name) == "string" and not hookedTables[value] then
+			if name:find("BlockMixin") and type(rawget(value, "SetHeader")) == "function" then
+				hookedTables[value] = true
+				hooksecurefunc(value, "SetHeader", function(block) pcall(OnHeader, block) end)
+			elseif name:find("TRACKER_MODULE") and type(rawget(value, "SetBlockHeader")) == "function" then
+				hookedTables[value] = true
+				hooksecurefunc(value, "SetBlockHeader", function(_, block) pcall(OnHeader, block) end)
+			end
+		end
+	end
+end
+
+local trackerHook = CreateFrame("Frame")
+trackerHook:RegisterEvent("ADDON_LOADED")
+trackerHook:RegisterEvent("PLAYER_LOGIN")
+trackerHook:SetScript("OnEvent", function(_, event, name)
+	if event == "PLAYER_LOGIN" or name == "Blizzard_ObjectiveTracker" then HookTracker() end
+end)
+HookTracker()
 
 SLASH_QUESTLOGSORT1 = "/qls"
 SLASH_QUESTLOGSORT2 = "/questlogsort"
@@ -332,7 +647,8 @@ SlashCmdList.QUESTLOGSORT = function(msg)
 	if zone or msg == "nivå" or msg == "niva" or msg == "level" then
 		QuestLogSortDB.trackerMode = zone and "zone" or nil
 		failedOrder = nil -- the new order deserves a try
-		Say(zone and "trackern sorteras nu zon för zon: oklara först, sedan klara, efter nivå inom varje zon."
+		if not zone then UnfoldAll() end
+		Say(zone and "trackern sorteras nu zon för zon, zonen du är i först: oklara först, sedan klara, efter nivå inom varje zon. Klicka på en zon för att fälla ihop den."
 			or "trackern sorteras nu efter nivå: oklara först, sedan klara.")
 		if not Enabled() then
 			Say("sorteringen är avstängd just nu; /qls på slår på den.")
@@ -341,6 +657,11 @@ SlashCmdList.QUESTLOGSORT = function(msg)
 		else
 			QueueTrackerSort()
 		end
+		return
+	end
+	if msg == "öppna" or msg == "oppna" or msg == "expand" then
+		UnfoldAll()
+		Say(InCombat() and "zonerna fälls ut när striden är över." or "alla zoner är utfällda.")
 		return
 	end
 	local on
@@ -352,7 +673,8 @@ SlashCmdList.QUESTLOGSORT = function(msg)
 		on = QuestLogSortDB.disabled -- no argument toggles
 	else
 		Say("/qls av stänger av all sortering (questloggen och trackern), /qls på slår på den igen. "
-			.. "/qls zon sorterar trackern zon för zon, /qls nivå bara efter nivå. "
+			.. "/qls zon sorterar trackern zon för zon (zonen du är i först; klicka på en zon för att fälla ihop den), "
+			.. "/qls nivå bara efter nivå, /qls öppna fäller ut alla zoner. "
 			.. "Nu: " .. (Enabled() and "på" or "av") .. ", trackern " .. (ByZone() and "zon för zon" or "efter nivå") .. ".")
 		return
 	end
@@ -364,6 +686,7 @@ SlashCmdList.QUESTLOGSORT = function(msg)
 	else
 		-- Blizzard's own order comes back the next time the log refreshes;
 		-- the tracker keeps its current order until something changes it.
+		UnfoldAll()
 		Say("av. Inget sorteras längre (sparas för alla dina karaktärer). /qls på slår på igen.")
 	end
 end

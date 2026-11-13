@@ -22,8 +22,13 @@
 -- 2.7 turns your minimap tracking (Find Herbs, Find Minerals) back on after
 -- login, since the game drops it (/gpanel spårning).
 --
--- 2.8 lists Revisorsinspektionen's settings in the Addons window, which is
--- now wider, with its settings in two columns.
+-- 2.8 makes the Addons window wider, with its settings in two columns.
+--
+-- 2.12 drops Revisorsinspektionen (retired), adds the settings that had
+-- only a command, and follows Swedbank 0.11: interest per week begun, and
+-- loan offers to answer. Standings and the tax rate come from
+-- SkatteverketAPI when it has them, and its pages without a command
+-- (Arbetsorder, Folkvald, Socialbidrag, Kontakta oss) get buttons.
 --
 -- 2.3 follows Skatteverket 0.28: standing is counted in play time on the
 -- whole account (8 h unpaid neutral, 12 h negative), and the best character
@@ -117,6 +122,21 @@ local function Standing(m)
 	return "negative"
 end
 
+-- Skatteverket's public API (0.32+): its own word on standings and the tax
+-- rate. Our math above stays for the countdowns (the API gives no debt age)
+-- and for older versions.
+local function API()
+	return type(SkatteverketAPI) == "table" and SkatteverketAPI or nil
+end
+
+-- A member's standing by name: the API's, else worked out from m.
+local function MemberStanding(name, m)
+	local api = API()
+	local st = api and api.MemberStanding and api.MemberStanding(name)
+	if st == "good" or st == "neutral" or st == "negative" then return st end
+	return Standing(m)
+end
+
 -- Your account's standing, worked out from Skatteverket's saved data the way
 -- it does: every character on the account in SkatteverketDB.chars, the
 -- youngest debt among those that have paid tax (all of them if none has),
@@ -175,7 +195,7 @@ end
 local function Favorites(members, roster)
 	local list = {}
 	for name, m in pairs(members or {}) do
-		if m.hasPaid and m.goodSince and Standing(m) == "good" and (not roster or roster[name]) then
+		if m.hasPaid and m.goodSince and MemberStanding(name, m) == "good" and (not roster or roster[name]) then
 			table.insert(list, name)
 		end
 	end
@@ -197,12 +217,23 @@ local function Favorites(members, roster)
 	return list
 end
 
+-- Swedbank 0.11: interest per week begun, counted from the day after the
+-- gold was sent (day 1-7 one week, day 8-14 two).
+local function WeeksAt(sentAt, t)
+	local d = date("*t", sentAt)
+	d.day, d.hour, d.min, d.sec = d.day + 1, 0, 0, 0
+	local start = time(d)
+	if t < start then return 0 end
+	return floor((t - start) / WEEK) + 1
+end
+
 -- What a loan costs now, the way Swedbank's "Mina lån" counts it.
 local function DueNow(loan)
 	if loan.status ~= "approved" or not loan.sentAt then return loan.amount or 0 end
 	local unconfirmed = 0
 	for _, p in pairs(loan.outbox or {}) do unconfirmed = unconfirmed + (p.amount or 0) end
-	local extra = (loan.left or 0) * (loan.rate or 0) * (time() - (loan.asOf or time())) / WEEK
+	local weeks = WeeksAt(loan.sentAt, time()) - WeeksAt(loan.sentAt, loan.asOf or time())
+	local extra = (loan.left or 0) * (loan.rate or 0) * math.max(0, weeks)
 	return math.max(0, (loan.left or 0) + (loan.interest or 0) + floor(extra) - unconfirmed - (loan.unverified or 0))
 end
 
@@ -212,6 +243,10 @@ local function LoanStatus(loan)
 		if (loan.repayBy or 0) > 0 and time() > loan.repayBy then return "|cffff4040Försenat|r" end
 		if next(loan.outbox or {}) or (loan.unverified or 0) > 0 then return "|cffffd100Betalning kontrolleras|r" end
 		return "|cff40ff40Aktivt|r"
+	elseif loan.status == "offered" then
+		return "|cffffd100Erbjudande: svara|r"
+	elseif loan.status == "accepted" then
+		return "Accepterat, väntar på ledaren"
 	elseif loan.status == "pending" then
 		return "Väntar på godkännande"
 	elseif loan.status == "sending" then
@@ -246,7 +281,7 @@ local function UpdateGuildCache()
 	for name in pairs(roster or {}) do
 		local m = members[name]
 		if m then
-			local st = Standing(m)
+			local st = MemberStanding(name, m)
 			cache.counts[st] = cache.counts[st] + 1
 		else
 			cache.without = cache.without + 1
@@ -280,6 +315,10 @@ local function TaxState()
 		s.debt = c.debtSince and s.owed >= 1 and (time() - c.debtSince) or nil
 		s.old = true
 	end
+	-- The API's standing wins; ours only fills in when it has none.
+	local api = API()
+	local official = api and api.Standing and api.Standing()
+	if official == "good" or official == "neutral" or official == "negative" then s.standing = official end
 	local good, negative = s.old and OLD_GOOD or GOOD, s.old and OLD_NEGATIVE or NEGATIVE
 	local played = s.old and "" or " speltid"
 	if s.debt then
@@ -583,7 +622,10 @@ local function RefreshTax(s)
 		return
 	end
 	local c = s.c
-	body.rate:SetText(format("Skattesats %g %%", ((SkatteverketDB and SkatteverketDB.rate) or 0.05) * 100))
+	local api = API()
+	local rate = api and api.TaxRate and api.TaxRate()
+	if not rate or rate <= 0 then rate = (SkatteverketDB and SkatteverketDB.rate) or 0.05 end
+	body.rate:SetText(format("Skattesats %g %%", rate * 100))
 	-- Registration (Skatteverket 0.12): SkatteverketCharDB.reg once signed,
 	-- with the number the guild leader hands out.
 	local reg = c.reg
@@ -623,7 +665,8 @@ local function RefreshGuild()
 	body.motd:SetText(motd ~= "" and ("|cffbfbfbfMeddelande:|r |cff40c0ff" .. motd .. "|r") or "|cff808080Inget gildemeddelande.|r")
 end
 
-local LOAN_ORDER = { approved = 1, pending = 2, sending = 3 }
+-- An offer waiting for your answer first, as in Swedbank's own list.
+local LOAN_ORDER = { offered = 1, approved = 2, accepted = 3, pending = 4, sending = 5 }
 
 local function RefreshLoans()
 	local body, c = frame.body, SwedbankCharDB
@@ -836,6 +879,11 @@ local WINDOWS = {
 	{ "Skatteverket", "Skatteverket", "SKATTEVERKET" },
 	{ "Skatteverket", "Yrkesregister", "SKATTEVERKET", "yrken" },
 	{ "Skatteverket", "Anmälan", "SKATTEVERKET", "anmälan" },
+	-- Pages with no command of their own open through SkatteverketAPI.Toggle.
+	{ "Skatteverket", "Arbetsorder", page = "orders" },
+	{ "Skatteverket", "Folkvald", page = "folk" },
+	{ "Skatteverket", "Socialbidrag", page = "bidrag" },
+	{ "Skatteverket", "Kontakta oss", page = "contact" },
 	{ "Swedbank", "Swedbank", "SWEDBANK" },
 	{ "Arbetsformedlingen", "Uppdrag", "ARBETSFORMEDLINGEN" },
 	{ "Arbetsformedlingen", "Platsbanken", "PLATSBANKEN" },
@@ -860,10 +908,12 @@ local SETTINGS = {
 		{ key = "gossip", label = "Välj NPC:ns enda pratval" },
 		{ key = "trivial", label = "Ta gråa uppdrag" },
 		{ key = "shared", label = "Ta uppdrag som gruppen delar" },
+		{ key = "repeatable", label = "Ta upprepningsbara uppdrag" },
 		{ key = "announce", label = "Säg till gruppen när ett uppdrag är klart", default = true },
 	} },
 	{ addon = "Kolapp", title = "Kölapp", db = "KolappDB", items = {
 		{ key = "chat", label = "Questkedjor i chatten", default = true },
+		{ key = "items", label = "Uppdrag på föremålens tips", default = true },
 	} },
 	{ addon = "Dodsannonser", title = "Dödsannonser", db = "DodsannonserDB", items = {
 		{ key = "quiet", label = "Visa nya i chatten", invert = true },
@@ -877,11 +927,6 @@ local SETTINGS = {
 	} },
 	{ addon = "Arbetsformedlingen", title = "Arbetsförmedlingen", db = "ArbetsformedlingenCharDB", items = {
 		{ key = "quiet", label = "Visa nya annonser i chatten", invert = true },
-	} },
-	-- The markup limit itself is a number: /revisor gräns 12.
-	{ addon = "Revisorsinspektionen", title = "Revisorsinspektionen", db = "RevisorsinspektionenDB", items = {
-		{ key = "dim", label = "Dämpa recept under påslagsgränsen", default = true },
-		{ key = "tooltip", label = "Vinst efter skatt i Bokföringens tips", default = true },
 	} },
 	-- trackerMode is "zone" or nil; any value counts as checked.
 	{ addon = "QuestLogSort", title = "QuestLogSort", db = "QuestLogSortDB", items = {
@@ -897,7 +942,9 @@ local SETTINGS = {
 		{ key = "celebrateQuiet", label = "Med ljud", invert = true },
 		{ key = "compact", label = "Kompakt rad tills musen är över", default = true, slash = { "GILDEPANEL", "kompakt" } },
 		{ key = "hideMinimap", label = "Visa minimapknappen", invert = true, default = true, slash = { "GILDEPANEL", "minimap" } },
-		{ key = "keepTracking", label = "Behåll örter/malm-spårning vid inloggning", default = true },
+		{ key = "locked", label = "Lås panelens plats" },
+		-- Through the command: turning it on saves the tracking you have now.
+		{ key = "keepTracking", label = "Behåll örter/malm-spårning vid inloggning", default = true, slash = { "GILDEPANEL", "spårning" } },
 	} },
 }
 
@@ -936,7 +983,9 @@ end
 local function RefreshHub()
 	if hub.camera then hub.camera() end
 	for _, b in ipairs(hub.windows) do
-		if Loaded(b.addon) and SlashCmdList[b.key] then b:Enable() else b:Disable() end
+		local api = b.page and API()
+		local ready = b.page and api and api.Toggle or (not b.page and SlashCmdList[b.key])
+		if Loaded(b.addon) and ready then b:Enable() else b:Disable() end
 	end
 	for _, row in ipairs(hub.groups) do
 		local loaded = Loaded(row.group.addon) and type(_G[row.group.db]) == "table"
@@ -997,8 +1046,12 @@ local function BuildHub()
 	local bw = (HW - 2 * PAD - 8 * (PER_ROW - 1)) / PER_ROW
 	local y = top - 24
 	for i, w in ipairs(WINDOWS) do
-		local b = Button(hub, w[2], bw, function() RunSlash(w[3], w[4] or "", w[2]) end)
-		b.addon, b.key = w[1], w[3]
+		local b = Button(hub, w[2], bw, function()
+			if not w.page then RunSlash(w[3], w[4] or "", w[2]) return end
+			local api = API()
+			if api and api.Toggle then api.Toggle(w.page) else Print("Skatteverket är inte på.") end
+		end)
+		b.addon, b.key, b.page = w[1], w[3], w.page
 		local col = (i - 1) % PER_ROW
 		b:SetPoint("TOPLEFT", PAD + col * (bw + 8), y)
 		if col == PER_ROW - 1 or i == #WINDOWS then y = y - 26 end

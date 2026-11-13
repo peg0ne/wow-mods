@@ -10,8 +10,8 @@ Guild addons are named after Swedish public institutions and companies.
 | Arbetsformedlingen | Shared quests (`/uppdrag`) and the Platsbanken group-finder board (`/platsbanken`) |
 | Skatteverket | Guild tax on looted gold, vendor and auction sales; standings in `/skatt` |
 | Swedbank | Guild loans; only the guild leader sees applications |
-| Gildepanel | A compact bar (`/gpanel`) that drops open on hover into a panel: your Skatteverket standing and tax, the favourites, who is online, your Swedbank loans. The Addons window (`/gpanel addons`) opens the other addons' windows and toggles their automatic settings and sets the max camera distance (`/gpanel kamera`); turns herb/mineral tracking back on after login (`/gpanel spårning`); warns an hour of play before your standing drops; celebrates with a gold flash, a banner, flying coins and a fanfare when you pay your tax (`/gpanel firande`, preview with `/gpanel firande test`) |
-| QuestLogSort | Puts completed quests last in the quest log and tracker; sorts the tracker by level. Waits until combat ends before reordering either. `/qls zon` sorts the tracker zone by zone instead (completed last in each zone, by level); `/qls av` turns it off entirely (for Questie users, whose tracker fights over the order) |
+| Gildepanel | A compact bar (`/gpanel`) that drops open on hover into a panel: your Skatteverket standing (from `SkatteverketAPI` when it has one) and tax, the favourites, who is online, your Swedbank loans. The Addons window (`/gpanel addons`) opens the other addons' windows (and Skatteverket's Arbetsorder, Folkvald, Socialbidrag and Kontakta oss pages through `SkatteverketAPI.Toggle`) and toggles their automatic settings and sets the max camera distance (`/gpanel kamera`); turns herb/mineral tracking back on after login (`/gpanel spårning`); warns an hour of play before your standing drops; celebrates with a gold flash, a banner, flying coins and a fanfare when you pay your tax (`/gpanel firande`, preview with `/gpanel firande test`) |
+| QuestLogSort | Puts completed quests last in the quest log and tracker; sorts the tracker by level. Waits until combat ends before reordering either. `/qls zon` sorts the tracker zone by zone instead (completed last in each zone, by level), the zone you are in first, each zone's name and a line above its first quest (the gap is only added out of combat). Clicking a zone folds it: its quests are unwatched and it stays as '+ Zone (3)' until clicked again, per character (`/qls öppna` unfolds all); `/qls av` turns it off entirely (for Questie users, whose tracker fights over the order) |
 | Statskontoret | Shared code the other addons depend on: the guild window (top-level, so windows stack cleanly), addon messages (throttled, so floods are not dropped), roster requests, invites, class colors. Shows nothing itself |
 | Postnord | Tells you in chat when a guildmate runs a newer release of this addon pack (`/postnord`). The release workflow stamps the tag into `Postnord.toc`; a copy run from the repo says `dev`, sends nothing and never warns |
 
@@ -69,7 +69,6 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Handlaggaren | 0.4 | Works in game; 0.3 leaves repeatable quests alone (`/hl upprepade` to take them) and never picks a reward before every choice has loaded. 0.4 says in party chat when a quest's objectives are done, like Questie (`/hl meddela` turns it off); not yet tested in game |
 | SCB | 0.4 | Works in game; saves the whole guild roster (rank, class, level, notes, last online) to `SCBDB.roster` |
 | Kolapp | 0.4 | Works in game: quest tracker numbers and the quest on item tooltips; 0.4 only changes the tracker's shown text, which stops the "blocked action" errors in combat |
-| Revisorsinspektionen | 0.1 | Works in game |
 | Statskontoret | 0.1 | New: shared library; not yet tested in game |
 
 ## Accepted ideas
@@ -149,12 +148,8 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 - Quest items still unexplained are looked up in the text of the quests in your log ("Nämns i: …"); reading that text selects each quest in turn and puts the old selection back. An item still unknown shows "Kölapp: okänt questföremål (ID …)".
 - Ideas for later: numbers in the NPC's quest list (gossip frame).
 
-### Revisorsinspektionen: Bokföring after guild tax (built, v0.1)
-- Bokföring (Zach's, in the AddOns folder only) subtracts the AH's 5% cut but not Skatteverket's tax, which is taken on the whole sale mail (price less the cut, plus the deposit back). A sale keeps about 0.95 × 0.95 = 90.25% of the listing price, so a craft needs about 10.8% markup on materials to break even.
-- Never changes Bokföring or Skatteverket: it reads `SkatteverketDB.rate` and the `row.data` that Bokföring puts on the row buttons of its global `BokforingFrame` (`cost`, `sells` after the cut, `sold`, `recipe`).
-- With Bokföring's window open, it dims recipes whose markup on the listing price is under the limit (12% by default) or that lose money after tax, and adds lines to the recipe tooltip: profit after tax, the tax, profit a day after tax, the markup and the break-even listing price.
-- `/revisor` shows the settings, `/revisor gräns 12` sets the limit, `/revisor dämpa` and `/revisor tips` toggle dimming and the tooltip lines. The two toggles are also in Gildepanel's Addons window (`/gpanel addons`, Gildepanel 2.8); the limit is only a command.
-- Not counted: the tax on the deposit (Bokföring doesn't know it) and the deposit lost on a relist.
+### Revisorsinspektionen (retired 2026-11-13, after v1.16.1)
+- Added Skatteverket's guild tax to Bokföring's profit and dimmed recipes under a 12% markup. Bokföring 0.6.4 now takes the tax off sales itself (`ns.Keep`), so it counted the tax twice; Skatteverket 0.32 also stopped taxing the AH deposit. Its group left Gildepanel's Addons window in 2.12.
 
 ### Utmärkelser: homemade achievements (social)
 - This client has no achievements. Events trigger them: `PLAYER_LEVEL_UP`, looting an epic, profession reaching 300, `UPDATE_FACTION` (exalted), first mount, boss kills (`UNIT_DIED` in the combat log), a run without dying.
@@ -183,7 +178,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 
 ## Ideas mentioned but not chosen
 
-**Guild:** Försäkringskassan (repair and death insurance paid from tax), Kronofogden (collects overdue Swedbank loans), Riksdagen (guild votes), SMHI (world-buff timers), Folkbokföring (links mains and alts), SJ (flight timer), Systembolaget (consumables check).
+**Guild:** Försäkringskassan (repair and death insurance paid from tax), Kronofogden (collects overdue Swedbank loans), SMHI (world-buff timers), Folkbokföring (links mains and alts), SJ (flight timer), Systembolaget (consumables check).
 
 **Interface:** square minimap with a button drawer, unit frames (class colors, real health numbers, draggable), tooltips (cursor anchor, guild rank, "taught by guildmate").
 

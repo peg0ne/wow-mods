@@ -12,12 +12,12 @@ exclude_files = { ".git", "tools" }
 globals = {
 	"ApiProbeBlocked", "ApiProbeDB", "ArbetsformedlingenCharDB", "AtervinningscentralenDB",
 	"DodsannonserDB", "EniroCharDB", "GildepanelDB", "HandlaggarenDB", "KolappDB", "PolisenDB",
-	"PostnordDB", "Rattsmedicinalverket", "RattsmedicinalverketDB", "RevisorsinspektionenDB",
+	"PostnordDB", "Rattsmedicinalverket", "RattsmedicinalverketDB",
 	"SCBCharDB", "Statskontoret", "SCBDB", "SLASH_APIPROBE1", "SLASH_ARBETSFORMEDLINGEN1", "SLASH_ARBETSFORMEDLINGEN2",
 	"SLASH_ATERVINNING1", "SLASH_ATERVINNING2", "SLASH_DODSANNONSER1", "SLASH_DODSANNONSER2",
 	"SLASH_DODSANNONSER3", "SLASH_ENIRO1", "SLASH_ENIRO2", "SLASH_GILDEPANEL1", "SLASH_GILDEPANEL2",
 	"SLASH_HANDLAGGAREN1", "SLASH_HANDLAGGAREN2", "SLASH_KOLAPP1", "SLASH_PLATSBANKEN1",
-	"SLASH_POLISEN1", "SLASH_POLISEN2", "SLASH_POSTNORD1", "SLASH_QUESTLOGSORT1", "SLASH_QUESTLOGSORT2", "QuestLogSortDB", "SLASH_REVISORSINSPEKTIONEN1",
+	"SLASH_POLISEN1", "SLASH_POLISEN2", "SLASH_POSTNORD1", "SLASH_QUESTLOGSORT1", "SLASH_QUESTLOGSORT2", "QuestLogSortDB", "QuestLogSortCharDB",
 	"SLASH_SCB1", "SLASH_SCB2", "SLASH_SKOLVERKET1", "SLASH_SKOLVERKET2", "SkolverketCharDB",
 	"SkolverketDB", "SlashCmdList",
 }
@@ -56,7 +56,7 @@ read_globals = {
 	"RaidNotice_AddMessage", "RaidWarningFrame", "RegisterAddonMessagePrefix", "RepairAllItems",
 	"SOUNDKIT", "SelectActiveQuest", "SelectAvailableQuest", "SendAddonMessage", "SendChatMessage",
 	"SetCVar", "SetTracking", "ShoppingTooltip1", "ShoppingTooltip2", "SkatteverketCharDB",
-	"SkatteverketDB", "SwedbankCharDB", "TooltipDataProcessor", "UIParent", "UISpecialFrames",
+	"SkatteverketAPI", "SkatteverketDB", "SwedbankCharDB", "TooltipDataProcessor", "UIParent", "UISpecialFrames",
 	"UnitClass", "UnitCreatureFamily", "UnitExists", "UnitFactionGroup", "UnitGUID",
 	"UnitIsDeadOrGhost", "UnitIsFriend", "UnitIsPlayer", "UnitLevel", "UnitName", "UnitRace",
 	"UseContainerItem", "WorldMapFrame", "bit", "date", "format", "geterrorhandler", "hooksecurefunc",
