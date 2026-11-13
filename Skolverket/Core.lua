@@ -54,13 +54,7 @@ function ns.InOurGuild()
 	return GetGuildInfo("player") == ns.GUILD
 end
 
-local function RequestRoster()
-	if C_GuildInfo and C_GuildInfo.GuildRoster then
-		C_GuildInfo.GuildRoster()
-	elseif GuildRoster then
-		GuildRoster()
-	end
-end
+local RequestRoster = Statskontoret.RequestRoster
 
 -- This character's full name as the guild sees it. Forever names have two
 -- words and UnitName gives only the first, so look it up by GUID in the
@@ -99,39 +93,8 @@ end
 -- Sending. The server drops addon messages sent too fast, so everything
 -- goes through a queue: a burst of 8, then one a second.
 
-local outbox, tokens, lastRefill, pumping = {}, 8, 0, false
-
-local function RawSend(msg)
-	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-		C_ChatInfo.SendAddonMessage(ns.PREFIX, msg, "GUILD")
-	elseif SendAddonMessage then
-		SendAddonMessage(ns.PREFIX, msg, "GUILD")
-	end
-end
-
-local function Pump()
-	local now = GetTime()
-	tokens = math.min(8, tokens + (now - lastRefill))
-	lastRefill = now
-	while tokens >= 1 and #outbox > 0 do
-		RawSend(table.remove(outbox, 1))
-		tokens = tokens - 1
-	end
-	if #outbox > 0 then
-		C_Timer.After(1, Pump)
-	else
-		pumping = false
-	end
-end
-
-local function Send(msg)
-	if not IsInGuild() then return end
-	table.insert(outbox, msg)
-	if not pumping then
-		pumping = true
-		Pump()
-	end
-end
+-- Throttled: the server drops floods (see Statskontoret.Sender).
+local Send = Statskontoret.Sender(ns.PREFIX)
 
 ---------------------------------------------------------------------------
 -- Recipe names: own scans give names directly; other members' recipes are
@@ -337,7 +300,10 @@ local function OnRoster()
 		end
 	end
 	ns.online = online
-	if GetGuildRosterShowOffline and GetGuildRosterShowOffline() then
+	-- Only prune against our own guild's roster: SkolverketDB is shared by
+	-- the account, and an alt in another guild would otherwise drop every
+	-- THÖNDERSTÖRM member's cooldowns.
+	if ns.InOurGuild() and GetGuildRosterShowOffline and GetGuildRosterShowOffline() then
 		inGuild = all
 		for name in pairs(db.cds) do
 			if not all[name] then db.cds[name] = nil end

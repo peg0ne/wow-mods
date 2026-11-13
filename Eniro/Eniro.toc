@@ -3,7 +3,8 @@
 ## Category: THÖNDERSTÖRM
 ## IconTexture: Interface\Icons\INV_Misc_Map_01
 ## Notes: Where your guild is, for THÖNDERSTÖRM: /eniro lists online members by zone and level, with whisper and invite buttons. Members who turn on position sharing show on the world map with their distance from you.
-## Version: 0.2
+## Version: 0.3
+## Dependencies: Statskontoret
 ## SavedVariablesPerCharacter: EniroCharDB
 Core.lua
 Map.lua

@@ -7,7 +7,9 @@
 -- (trivial) quests are left alone unless /hl grå. Choosing an NPC's only
 -- chat option is off by default (/hl prat): some single options do things
 -- (set your home, open a vendor). Quests a party member shares are left
--- for you to accept or decline unless /hl delade.
+-- for you to accept or decline unless /hl delade. Repeatable quests
+-- (Runecloth and other turn-ins that use up items) are left alone unless
+-- /hl upprepade.
 --
 -- Written for Forever's retail-based client (C_GossipInfo), with the older
 -- quest greeting functions for NPCs that use that window instead.
@@ -19,6 +21,7 @@ local defaults = {
 	gossip = false,   -- choose an NPC's only chat option
 	trivial = false,  -- also take gray quests
 	shared = false,   -- accept quests a party member shares
+	repeatable = false, -- also pick up repeatable quests (turn-ins that use up items)
 }
 
 local db
@@ -58,7 +61,7 @@ end
 -- Gossip windows (most NPCs).
 
 local function OnGossip()
-	skipping = IsShiftKeyDown()
+	skipping = skipping or IsShiftKeyDown()   -- stays on until the conversation ends
 	if not Active() or not C_GossipInfo then return end
 	-- Finished quests first.
 	for _, q in ipairs(C_GossipInfo.GetActiveQuests and C_GossipInfo.GetActiveQuests() or {}) do
@@ -68,7 +71,8 @@ local function OnGossip()
 		end
 	end
 	for _, q in ipairs(C_GossipInfo.GetAvailableQuests and C_GossipInfo.GetAvailableQuests() or {}) do
-		if q.questID and not q.isIgnored and (db.trivial or not q.isTrivial) and FirstTry(q.questID) then
+		if q.questID and not q.isIgnored and (db.trivial or not q.isTrivial)
+			and (db.repeatable or not q.repeatable) and FirstTry(q.questID) then
 			C_GossipInfo.SelectAvailableQuest(q.questID)
 			return
 		end
@@ -85,7 +89,7 @@ end
 
 -- The older quest greeting window (NPCs with only quests).
 local function OnGreeting()
-	skipping = IsShiftKeyDown()
+	skipping = skipping or IsShiftKeyDown()   -- stays on until the conversation ends
 	if not Active() then return end
 	-- This window gives titles, not quest IDs; the title stands in for the ID.
 	for i = 1, (GetNumActiveQuests and GetNumActiveQuests() or 0) do
@@ -96,9 +100,11 @@ local function OnGreeting()
 		end
 	end
 	for i = 1, (GetNumAvailableQuests and GetNumAvailableQuests() or 0) do
-		local isTrivial = GetAvailableQuestInfo and select(1, GetAvailableQuestInfo(i))
+		local isTrivial, isRepeatable, _
+		if GetAvailableQuestInfo then isTrivial, _, isRepeatable = GetAvailableQuestInfo(i) end
 		local title = GetAvailableTitle and GetAvailableTitle(i)
-		if (db.trivial or not isTrivial) and FirstTry("n:" .. tostring(title or i)) then
+		if (db.trivial or not isTrivial) and (db.repeatable or not isRepeatable)
+			and FirstTry("n:" .. tostring(title or i)) then
 			SelectAvailableQuest(i)
 			return
 		end
@@ -149,7 +155,13 @@ local function Mark(button)
 	marker:Show()
 end
 
-local function OnComplete()
+-- Raised whenever a reward screen opens or closes, so a retry that was
+-- waiting for item data knows whether it is still the same screen.
+local rewardScreen = 0
+local LOAD_TRIES = 4      -- checks, half a second apart, for uncached rewards
+
+local function OnComplete(attempt)
+	attempt = attempt or 1
 	if marker then marker:Hide() end
 	if IsShiftKeyDown() then skipping = true end
 	local choices = GetNumQuestChoices() or 0
@@ -157,15 +169,29 @@ local function OnComplete()
 		if Active() then GetQuestReward(choices) end
 		return
 	end
-	-- Several rewards: find the one that sells for most.
-	local best, bestPrice = nil, -1
+	-- Several rewards: find the one that sells for most. An item the client
+	-- hasn't loaded yet has no price; it may be the best one, so ask for it
+	-- and look again rather than pick without it.
+	local best, bestPrice, unknown = nil, -1, false
 	for i = 1, choices do
 		local link = GetQuestItemLink("choice", i)
-		local price = link and select(11, GetItemInfo(link)) or 0
+		local price = link and select(11, GetItemInfo(link))
+		if not price then
+			unknown = true
+			if link and C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, link) end
+		end
+		price = price or 0
 		if price > bestPrice then best, bestPrice = i, price end
 	end
+	if unknown and attempt < LOAD_TRIES then
+		local screen = rewardScreen
+		C_Timer.After(0.5, function()
+			if screen == rewardScreen then OnComplete(attempt + 1) end
+		end)
+		return
+	end
 	if not best or bestPrice <= 0 then return end
-	if Active() and db.pickBest then
+	if Active() and db.pickBest and not unknown then
 		Print(string.format("valde %s (säljs för %s).", GetQuestItemLink("choice", best) or "belöningen", Money(bestPrice)))
 		GetQuestReward(best)
 		return
@@ -207,15 +233,25 @@ events:SetScript("OnEvent", function(_, event, ...)
 	elseif event == "QUEST_GREETING" then OnGreeting()
 	elseif event == "QUEST_DETAIL" then OnDetail()
 	elseif event == "QUEST_PROGRESS" then OnProgress()
-	elseif event == "QUEST_COMPLETE" then OnComplete()
+	elseif event == "QUEST_COMPLETE" then
+		rewardScreen = rewardScreen + 1
+		OnComplete()
 	elseif event == "QUEST_ACCEPTED" then
 		-- Retail passes the quest ID; older clients pass the log index first.
 		local a, b = ...
 		OnAccepted(b or a)
 	elseif event == "GOSSIP_CLOSED" or event == "QUEST_FINISHED" then
-		-- The conversation is over; the next one decides afresh.
-		skipping = false
+		rewardScreen = rewardScreen + 1
 		if marker then marker:Hide() end
+		-- These also fire when the NPC's chat window hands over to the quest
+		-- window (or back), which is still the same conversation: Shift held
+		-- when it opened must keep skipping. Decide afresh only once neither
+		-- window is open.
+		C_Timer.After(0.2, function()
+			local gossip = GossipFrame and GossipFrame:IsShown()
+			local quest = QuestFrame and QuestFrame:IsShown()
+			if not gossip and not quest then skipping = false end
+		end)
 	end
 end)
 
@@ -226,6 +262,7 @@ local SETTINGS = {
 	{ "gossip", "prat", "välj NPC:ns enda pratval" },
 	{ "trivial", "grå", "ta gråa uppdrag" },
 	{ "shared", "delade", "ta uppdrag som gruppen delar" },
+	{ "repeatable", "upprepade", "ta upprepningsbara uppdrag" },
 }
 
 local function Status()
@@ -246,10 +283,10 @@ SlashCmdList.HANDLAGGAREN = function(msg)
 		Status()
 		return
 	end
-	local aliases = { ["belöning"] = "pickBest", beloning = "pickBest", dela = "share", prat = "gossip", ["grå"] = "trivial", gra = "trivial", delade = "shared" }
+	local aliases = { ["belöning"] = "pickBest", beloning = "pickBest", dela = "share", prat = "gossip", ["grå"] = "trivial", gra = "trivial", delade = "shared", upprepade = "repeatable" }
 	local key = aliases[cmd]
 	if not key then
-		Print("/hl visar inställningarna. /hl av | på, /hl belöning, /hl dela, /hl prat, /hl grå, /hl delade slår av eller på.")
+		Print("/hl visar inställningarna. /hl av | på, /hl belöning, /hl dela, /hl prat, /hl grå, /hl delade, /hl upprepade slår av eller på.")
 		return
 	end
 	db[key] = not db[key]

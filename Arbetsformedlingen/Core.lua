@@ -12,6 +12,7 @@
 --   W;id,id,...                           what are these quests called?
 --   N;id;level;zone;title                 answer from one member who has it
 --   J;version;id;tank;heal;dps;quest;level;text   Platsbanken: my listing
+--   A;id;age                              Platsbanken: my listing has been up age s (0.7)
 --   X;id                                  Platsbanken: my listing is gone
 -- Whispers (Platsbanken, see Platsbanken.lua):
 --   S;id;role   apply      I;id   invited      Z;id   application removed
@@ -25,10 +26,11 @@
 -- last seen under each zone are kept in ArbetsformedlingenCharDB and used
 -- while that zone stays collapsed.
 
-local _, ns = ...
+local addonName, ns = ...
 
 ns.GUILD = "THÖNDERSTÖRM"
-ns.VERSION = "0.3"
+-- From the .toc, so a release raises it and older copies hear about it.
+ns.VERSION = Statskontoret.AddonVersion(addonName, "0.3")
 ns.PREFIX = "UPPDRAG"
 local CHUNK = 200
 
@@ -53,13 +55,7 @@ function ns.InOurGuild()
 	return GetGuildInfo("player") == ns.GUILD
 end
 
-local function RequestRoster()
-	if C_GuildInfo and C_GuildInfo.GuildRoster then
-		C_GuildInfo.GuildRoster()
-	elseif GuildRoster then
-		GuildRoster()
-	end
-end
+local RequestRoster = Statskontoret.RequestRoster
 ns.RequestRoster = RequestRoster
 
 -- This character's full name as the guild sees it. Forever names have two
@@ -92,23 +88,17 @@ function ns.IsMe(name)
 	return name == UnitName("player") or (name and name:match("^(%S+)") == UnitName("player"))
 end
 
-local function Send(msg)
-	if not IsInGuild() then return end
-	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-		C_ChatInfo.SendAddonMessage(ns.PREFIX, msg, "GUILD")
-	elseif SendAddonMessage then
-		SendAddonMessage(ns.PREFIX, msg, "GUILD")
-	end
+-- Throttled: the server drops floods (see Statskontoret.Sender). Lists,
+-- name answers and Platsbanken all share the one prefix, so one queue.
+local Queue = Statskontoret.Sender(ns.PREFIX)
+local function Send(msg, check)
+	Queue(msg, "GUILD", nil, check)
 end
 ns.Send = Send
 
 -- An addon whisper to one member.
 function ns.SendTo(target, msg)
-	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-		C_ChatInfo.SendAddonMessage(ns.PREFIX, msg, "WHISPER", target)
-	elseif SendAddonMessage then
-		SendAddonMessage(ns.PREFIX, msg, "WHISPER", target)
-	end
+	Queue(msg, "WHISPER", target)
 end
 
 local function Changed()
@@ -182,16 +172,42 @@ local function ReadLog()
 	char.cache = cache
 	ns.mine = mine
 	for id, q in pairs(mine) do
-		if q.title then char.titles[id] = { title = q.title, level = q.level, zone = q.zone } end
+		if q.title then char.titles[id] = { title = q.title, level = q.level, zone = q.zone, seen = time() } end
 	end
 end
 ns.ReadLog = function() if char then ReadLog() end end
 
+-- Learned names are kept while they are in use. Each login drops those not
+-- used for TITLE_DAYS, and the oldest beyond TITLE_MAX; a name that is still
+-- needed is simply asked for again.
+local TITLE_DAYS, TITLE_MAX = 30, 500
+
+local function PruneTitles()
+	local now, list = time(), {}
+	for id, t in pairs(char.titles) do
+		-- Names saved before 0.7 have no stamp; count them as seen now.
+		if type(t) == "table" then t.seen = t.seen or now end
+		if type(t) ~= "table" or now - t.seen > TITLE_DAYS * 86400 then
+			char.titles[id] = nil
+		else
+			list[#list + 1] = id
+		end
+	end
+	if #list <= TITLE_MAX then return end
+	table.sort(list, function(a, b) return char.titles[a].seen > char.titles[b].seen end)
+	for i = TITLE_MAX + 1, #list do char.titles[list[i]] = nil end
+end
+
 -- Name, level and zone of any quest: our own log, names we have learned,
 -- or the game's quest cache. nil when nobody has told us yet.
 function ns.QuestInfo(id)
-	local q = ns.mine[id] or (char and char.titles[id])
+	local q = ns.mine[id]
 	if q and q.title then return q end
+	q = char and char.titles[id]
+	if q and q.title then
+		q.seen = time()   -- still in use; see PruneTitles
+		return q
+	end
 	local title = C_QuestLog and C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(id)
 	if not title and C_QuestLog and C_QuestLog.GetQuestInfo then title = C_QuestLog.GetQuestInfo(id) end
 	if title and title ~= "" then return { title = title } end
@@ -232,10 +248,15 @@ local function OnWhat(parts)
 			answered[id] = nil
 			C_Timer.After(math.random() * 3, function()
 				if answered[id] then return end
-				answered[id] = true
 				local title = q.title:gsub(";", ","):sub(1, 150)
 				local zone = (q.zone or ""):gsub(";", ","):sub(1, 50)
-				Send(string.format("N;%d;%s;%s;%s", id, tostring(q.level or ""), zone, title))
+				-- Queued: by the time it is our turn someone else may have
+				-- answered, and then ours is dropped.
+				Send(string.format("N;%d;%s;%s;%s", id, tostring(q.level or ""), zone, title), function()
+					if answered[id] then return false end
+					answered[id] = true
+					return true
+				end)
 			end)
 		end
 	end
@@ -246,7 +267,7 @@ local function OnName(parts)
 	if not id or not parts[5] or parts[5] == "" then return end
 	answered[id] = true
 	if not ns.mine[id] then
-		char.titles[id] = { title = parts[5], level = tonumber(parts[3]), zone = parts[4] ~= "" and parts[4] or nil }
+		char.titles[id] = { title = parts[5], level = tonumber(parts[3]), zone = parts[4] ~= "" and parts[4] or nil, seen = time() }
 		Changed()
 	end
 end
@@ -346,7 +367,7 @@ local function OnAddonMessage(prefix, msg, channel, sender)
 				if ns.OnPlatsAsked then ns.OnPlatsAsked() end
 			end)
 		end
-	elseif parts[1] == "J" or parts[1] == "X" then
+	elseif parts[1] == "J" or parts[1] == "A" or parts[1] == "X" then
 		if ns.OnPlatsGuild then ns.OnPlatsGuild(sender, parts) end
 	elseif parts[1] == "L" then
 		OnList(sender, parts)
@@ -458,6 +479,7 @@ events:SetScript("OnEvent", function(_, event, ...)
 			char = ArbetsformedlingenCharDB
 			char.cache = char.cache or {}
 			char.titles = char.titles or {}
+			PruneTitles()
 			ns.char = char
 		end
 	elseif not char then

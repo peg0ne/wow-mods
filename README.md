@@ -11,7 +11,8 @@ Guild addons are named after Swedish public institutions and companies.
 | Skatteverket | Guild tax on looted gold, vendor and auction sales; standings in `/skatt` |
 | Swedbank | Guild loans; only the guild leader sees applications |
 | Gildepanel | A compact bar (`/gpanel`) that drops open on hover into a panel: your Skatteverket standing and tax, the favourites, who is online, your Swedbank loans. The Addons window (`/gpanel addons`) opens the other addons' windows and toggles their automatic settings and sets the max camera distance (`/gpanel kamera`); turns herb/mineral tracking back on after login (`/gpanel spårning`); warns an hour of play before your standing drops; celebrates with a gold flash, a banner, flying coins and a fanfare when you pay your tax (`/gpanel firande`, preview with `/gpanel firande test`) |
-| QuestLogSort | Puts completed quests last in the quest log and tracker; sorts the tracker by level |
+| QuestLogSort | Puts completed quests last in the quest log and tracker; sorts the tracker by level. Waits until combat ends before reordering either |
+| Statskontoret | Shared code the other addons depend on: the guild window (top-level, so windows stack cleanly), addon messages (throttled, so floods are not dropped), roster requests, invites, class colors. Shows nothing itself |
 | Postnord | Tells you in chat when a guildmate runs a newer release of this addon pack (`/postnord`). The release workflow stamps the tag into `Postnord.toc`; a copy run from the repo says `dev`, sends nothing and never warns |
 
 Guild addons share data through `C_ChatInfo.SendAddonMessage` on the GUILD channel and store it in SavedVariables.
@@ -29,6 +30,15 @@ Releases: pushing a tag like `v1.1` (`git tag v1.1; git push origin v1.1`) runs 
 which zips every addon except ApiProbe into a GitHub release on https://github.com/peg0ne/wow-mods.
 Guild members install it once in WowUp-CF (Get Addons → Install from URL → the repo link) and get updates from then on.
 Don't install them through WowUp on the dev machine: it would replace the junctions from `link.ps1`.
+
+Checks: every push runs `.github/workflows/lint.yml`, which compiles each Lua file under 5.1 and runs
+[luacheck](https://github.com/lunarmodules/luacheck) with `.luacheckrc`. Run `luacheck .` locally before pushing.
+A new game API or SavedVariables name has to be added to `.luacheckrc` (read_globals or globals); that is
+what lets the check catch typos and calls to functions this client doesn't have.
+
+Shared code lives in `Statskontoret` (global `Statskontoret`). An addon that uses it lists it in its `.toc`
+(`## Dependencies: Statskontoret`) so the game loads it first. Put code there when a second addon needs it,
+keep it backwards compatible (add functions, don't change existing ones) and raise `Statskontoret.API` when adding.
 
 Conventions (matching the existing addons):
 - Folder and SavedVariables names are ASCII (`Atervinningscentralen`); `## Title` keeps the Swedish spelling.
@@ -50,16 +60,17 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 
 | Addon | Version | Status |
 |---|---|---|
-| Atervinningscentralen | 0.1 | Works in game (sells grays, repairs) |
-| Skolverket | 0.3 | Cut down to cooldowns and the item tooltip (reads Skatteverket's recipes); not yet tested in game |
-| Eniro | 0.1 | Works in game (member list); position sharing not yet tested (needs a second member) |
-| Rattsmedicinalverket | 0.4 | Works in game (killer, level, ability, position from the Death Recap); 0.4 stops a second "unknown cause" record when `PLAYER_DEAD` fires again for the same death |
-| Polisen | 0.1 | Loads without errors; reports need a death to a hostile player |
-| Dodsannonser | 0.5 | Built, not yet tested in game (level-up notices added in 0.4; hunter pet level-ups in 0.5, preview with `/dodsannons test husdjur`, off with `/dodsannons husdjur`) |
-| Handlaggaren | 0.2 | Built, not yet tested in game |
-| SCB | 0.3 | Roster export works in game; the rest is not yet tested. 0.3 saves the whole guild roster (rank, class, level, notes, last online) to `SCBDB.roster` |
-| Kolapp | 0.3 | Works in game (quest tracker numbers); 0.3 adds the quest on item tooltips, not yet tested in game |
-| Revisorsinspektionen | 0.1 | Built, not yet tested in game |
+| Atervinningscentralen | 0.2 | Works in game (sells grays, repairs); 0.2 repairs after the money for the grays has arrived |
+| Skolverket | 0.5 | Works in game: cooldowns and the item tooltip (reads Skatteverket's recipes) |
+| Eniro | 0.3 | Works in game: member list; position sharing needs a second member online to test |
+| Rattsmedicinalverket | 0.5 | Works in game (killer, level, ability, position from the Death Recap); 0.4 stops a second "unknown cause" record when `PLAYER_DEAD` fires again for the same death |
+| Polisen | 0.4 | Works in game; reports need a death to a hostile player. 0.4: battleground and arena deaths and sightings are ignored; catching up after login no longer misses incidents (asks from where it was last complete, pages through long gaps, server time). Full catch-up needs the answering member on 0.4 too |
+| Dodsannonser | 0.6 | Works in game (level-up notices since 0.4; hunter pet level-ups since 0.5, preview with `/dodsannons test husdjur`, off with `/dodsannons husdjur`) |
+| Handlaggaren | 0.3 | Works in game; 0.3 leaves repeatable quests alone (`/hl upprepade` to take them) and never picks a reward before every choice has loaded |
+| SCB | 0.4 | Works in game; saves the whole guild roster (rank, class, level, notes, last online) to `SCBDB.roster` |
+| Kolapp | 0.4 | Works in game: quest tracker numbers and the quest on item tooltips; 0.4 only changes the tracker's shown text, which stops the "blocked action" errors in combat |
+| Revisorsinspektionen | 0.1 | Works in game |
+| Statskontoret | 0.1 | New: shared library; not yet tested in game |
 
 ## Accepted ideas
 

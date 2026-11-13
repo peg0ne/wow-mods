@@ -1,0 +1,26 @@
+# Checks every push: the Lua must compile under 5.1 (what WoW runs) and pass
+# luacheck with .luacheckrc, which flags unknown globals (typos, or game API
+# calls that would be nil in game), unused code and shadowed variables.
+name: Lint
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lua 5.1 and luacheck
+        run: |
+          sudo apt-get install -y -qq lua5.1 luarocks >/dev/null
+          sudo luarocks install luacheck >/dev/null
+
+      - name: Check Lua syntax
+        run: find . -name '*.lua' -not -path './.git/*' -print0 | xargs -0 -n1 luac5.1 -p
+
+      - name: Luacheck
+        run: luacheck . --no-color

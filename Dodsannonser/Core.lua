@@ -333,9 +333,7 @@ local function OnLevelUp(level)
 	if not db or db.noLevels or not InOurGuild() or not level or level < 2 then return end
 	local name = UnitName("player")
 	local _, classFile = UnitClass("player")
-	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-		C_ChatInfo.SendAddonMessage(PREFIX, string.format("L;%s;%d;%s", name, level, classFile or ""), "GUILD")
-	end
+	Statskontoret.SendAddon(PREFIX, string.format("L;%s;%d;%s", name, level, classFile or ""), "GUILD")
 	local text = ShowLevel(name, level, classFile)
 	if text and db.guildChat then
 		-- Same wait as the obituary, so the others hide the copy.
@@ -386,9 +384,7 @@ local function ReadPet()
 	local owner, pet = UnitName("player"), Plain(UnitName("pet"))
 	if not pet or pet == "" or pet:find(";") then return end
 	local family = Plain(UnitCreatureFamily and UnitCreatureFamily("pet")) or ""
-	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-		C_ChatInfo.SendAddonMessage(PREFIX, string.format("P;%s;%s;%d;%s", owner, pet, level, family), "GUILD")
-	end
+	Statskontoret.SendAddon(PREFIX, string.format("P;%s;%s;%d;%s", owner, pet, level, family), "GUILD")
 	local text = ShowPetLevel(owner, pet, level, family)
 	if text and db.guildChat then
 		C_Timer.After(2, function()

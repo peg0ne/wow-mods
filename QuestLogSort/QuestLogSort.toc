@@ -3,5 +3,5 @@
 ## Category: Quests
 ## IconTexture: Interface\Icons\INV_Misc_Book_08
 ## Notes: Completed quests last in the quest log (per zone) and in the quest tracker, which is also sorted by level.
-## Version: 1.2
+## Version: 1.3
 QuestLogSort.lua

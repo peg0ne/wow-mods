@@ -3,7 +3,7 @@
 ## Category: Quests
 ## IconTexture: Interface\Icons\INV_Scroll_02
 ## Notes: Shows where a quest sits in its quest chain, like (2/4) in the quest window title, and tells you in chat what comes next when you hand one in. Item tooltips name the quest an item belongs to. /kolapp for settings.
-## Version: 0.3
+## Version: 0.4
 ## SavedVariables: KolappDB
 Data.lua
 ItemData.lua

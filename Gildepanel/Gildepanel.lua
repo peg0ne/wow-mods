@@ -180,9 +180,15 @@ local function Favorites(members, roster)
 		end
 	end
 	-- The longest run first: in play time where reported (0.28), else days.
-	local function Run(m) return m.goodAge or (time() - m.goodSince) end
+	-- Worked out once before sorting: a time() read inside the comparator can
+	-- tick over mid-sort and make the order inconsistent.
+	local now, run = time(), {}
+	for _, name in ipairs(list) do
+		local m = members[name]
+		run[name] = m.goodAge or (now - m.goodSince)
+	end
 	table.sort(list, function(a, b)
-		local ra, rb = Run(members[a]), Run(members[b])
+		local ra, rb = run[a], run[b]
 		if ra ~= rb then return ra > rb end
 		local ga, gb = members[a].goodSince, members[b].goodSince
 		if ga ~= gb then return ga < gb end
@@ -361,6 +367,7 @@ local function Bar(parent, width, height)
 	SetColor(tick, 1, 1, 1, 0.7)
 	tick:SetSize(2, height + 4)
 	tick:SetPoint("CENTER", bar, "LEFT", width * GOOD / NEGATIVE, 0)
+	bar.tick, bar.width = tick, width
 	return bar
 end
 
@@ -461,7 +468,8 @@ local function Build()
 	body.rate:SetPoint("TOPRIGHT", -PAD, -61)
 	body.note = Text(body, "GameFontHighlightSmall", "TOPLEFT", PAD, -82)
 	body.note:SetWidth(W - 2 * PAD)
-	-- Debt age: the bar fills over a week, with a mark where 48 hours ends.
+	-- Debt age: the bar fills up to negative standing, with a mark where good
+	-- standing ends (8 of 12 hours' play; 48 hours of a week on old Skatteverket).
 	body.bar = Bar(body, W - 2 * PAD, 10)
 	body.bar:SetPoint("TOPLEFT", PAD, -100)
 	body.owed = Pair(body, -118, "Skyldig nu")
@@ -544,6 +552,13 @@ local function FitHeight()
 	if math.abs(frame:GetHeight() - height) > 0.5 then frame:SetHeight(height) end
 end
 
+-- The mark where good standing ends; old Skatteverket counts days, not play.
+local function PlaceTick(bar, s)
+	local at = s.old and OLD_GOOD / OLD_NEGATIVE or GOOD / NEGATIVE
+	bar.tick:ClearAllPoints()
+	bar.tick:SetPoint("CENTER", bar, "LEFT", bar.width * at, 0)
+end
+
 local function RefreshTax(s)
 	local compact, body = frame.compact, frame.body
 	local standing = StandingText(s)
@@ -552,11 +567,13 @@ local function RefreshTax(s)
 	compact.note:SetText(s.short)
 	compact.bar:SetValue(s.bar or 0)
 	if s.color then compact.bar:SetStatusBarColor(s.color[1], s.color[2], s.color[3]) end
+	PlaceTick(compact.bar, s)
 	if not expanded then return end
 
 	body.standing:SetText(standing)
 	body.note:SetText(s.note)
 	body.bar:SetValue(s.bar or 0)
+	PlaceTick(body.bar, s)
 	if s.color then body.bar:SetStatusBarColor(s.color[1], s.color[2], s.color[3]) end
 	if not s.ok then
 		body.rate:SetText("")
@@ -678,7 +695,7 @@ local function OpenPanel()
 	frame:Show()
 	-- Older versions kept another corner; switch to the top-left one.
 	if db.pos and db.pos[1] ~= "TOPLEFT" then SavePosition() end
-	if C_GuildInfo and C_GuildInfo.GuildRoster then C_GuildInfo.GuildRoster() elseif GuildRoster then GuildRoster() end
+	Statskontoret.RequestRoster()
 	guildDirty, cache.at = true, 0
 	Refresh()
 end
@@ -926,50 +943,7 @@ local function RefreshHub()
 	end
 end
 
--- The look of Skatteverket's panel: the game's portrait window (like the
--- Character window) with the guild's lightning bolt from Skatteverket's
--- art and the title on the title bar. Falls back to the old dialog look on
--- a client without the template, as Skatteverket does.
-local function HasTemplate(name)
-	if C_XMLUtil and C_XMLUtil.GetTemplateInfo then return C_XMLUtil.GetTemplateInfo(name) ~= nil end
-	return true
-end
-
-local function Panel(name, titleText)
-	local ok, f = false, nil
-	if HasTemplate("ButtonFrameTemplate") then ok, f = pcall(CreateFrame, "Frame", name, UIParent, "ButtonFrameTemplate") end
-	if ok and f then
-		local art = Loaded("Skatteverket") and "Interface\\AddOns\\Skatteverket\\Media\\Bolt" or "Interface\\Icons\\Spell_Nature_Lightning"
-		local portrait = f.portrait or f.Portrait or (f.PortraitContainer and f.PortraitContainer.portrait)
-			or _G[name .. "Portrait"]
-		if f.SetPortraitToAsset then
-			f:SetPortraitToAsset(art)
-		elseif portrait then
-			portrait:SetTexture(art)
-		end
-		if portrait then portrait:Show() end
-		local title = f.TitleText or (f.TitleContainer and f.TitleContainer.TitleText)
-		if title then title:SetText(titleText) end
-		return f, true
-	end
-	f = CreateFrame("Frame", name, UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-	f:SetBackdrop({
-		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-		tile = true, tileSize = 32, edgeSize = 32,
-		insets = { left = 11, right = 12, top = 12, bottom = 11 },
-	})
-	local header = f:CreateTexture(nil, "ARTWORK")
-	header:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header")
-	header:SetSize(320, 64)
-	header:SetPoint("TOP", 0, 12)
-	local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	title:SetPoint("TOP", header, "TOP", 0, -14)
-	title:SetText(titleText)
-	local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", -6, -6)
-	return f, false
-end
+local Panel = Statskontoret.Panel
 
 local function BuildHub()
 	-- Wide, with the settings in two columns (2.8): one column grew too tall.
@@ -1247,13 +1221,13 @@ local function BuildShow()
 		local p = math.min(t / 0.7, 1)
 		local ease = p >= 1 and 1 or 1 + 2 ^ (-10 * p) * math.sin((p * 10 - 0.75) * 2 * math.pi / 3)
 		local scale = math.max(0.05, 2.4 - 1.4 * ease)
-		local b = self.banner
-		b:SetScale(scale)
-		b:ClearAllPoints()
-		b:SetPoint("CENTER", UIParent, "CENTER", 0, 170 / scale)
-		b:SetAlpha(math.min(t / 0.15, 1) * fade)
-		if b.star.SetRotation then b.star:SetRotation(t * 1.3) end
-		b.star:SetAlpha(0.6 + 0.4 * math.sin(t * 4))
+		local banner = self.banner
+		banner:SetScale(scale)
+		banner:ClearAllPoints()
+		banner:SetPoint("CENTER", UIParent, "CENTER", 0, 170 / scale)
+		banner:SetAlpha(math.min(t / 0.15, 1) * fade)
+		if banner.star.SetRotation then banner.star:SetRotation(t * 1.3) end
+		banner.star:SetAlpha(0.6 + 0.4 * math.sin(t * 4))
 		-- The coins: thrown out and pulled down, spinning.
 		local alive = false
 		for _, c in ipairs(self.coins) do
@@ -1383,7 +1357,17 @@ end
 ------------------------------------------------------------------------
 -- A heads-up in chat an hour of play before the standing drops a step.
 
-local warned = {}
+-- Warnings already given, in GildepanelDB so a /reload doesn't repeat
+-- them. Keys hold when the debt started, so a new debt warns afresh; keys
+-- are dropped after two weeks.
+local function Warned()
+	db.warned = db.warned or {}
+	local now = time()
+	for key, at in pairs(db.warned) do
+		if type(at) ~= "number" or now - at > 14 * 86400 then db.warned[key] = nil end
+	end
+	return db.warned
+end
 local function CheckWarning()
 	if db.warn == false then return end
 	local c = SkatteverketCharDB
@@ -1394,10 +1378,11 @@ local function CheckWarning()
 	local good, negative = s.old and OLD_GOOD or GOOD, s.old and OLD_NEGATIVE or NEGATIVE
 	local ahead = s.old and 6 * 3600 or WARN_BEFORE
 	local start = s.old and c.debtSince or floor(((SkatteverketDB and SkatteverketDB.clock) or 0) - s.debt)
+	local warned = Warned()
 	for _, step in ipairs({ { good, "|cffffd100Neutral|r" }, { negative, "|cffff4040Negativ|r" } }) do
 		local left, key = step[1] - s.debt, floor(start / 60) .. ":" .. step[1]
 		if left > 0 and left <= ahead and not warned[key] then
-			warned[key] = true
+			warned[key] = time()
 			Print(format("din ställning blir %s om %s%s. Betala %s vid gildebanken för att behålla den.", step[2], Duration(left), s.old and "" or " speltid", Money(c.owed)))
 		end
 	end
@@ -1552,10 +1537,19 @@ SlashCmdList.GILDEPANEL = function(msg)
 	elseif cmd == "skala" or cmd == "scale" then
 		local s = tonumber((rest:gsub(",", ".")))
 		if not s or s < 0.5 or s > 2 then Print("så här: /gpanel skala 0.9 (mellan 0.5 och 2)") return end
+		local old = db.scale or 1
 		db.scale = s
+		-- The saved corner is in the frame's own scaled units: convert it so
+		-- the panel stays on the same spot of the screen.
+		if db.pos and db.pos[1] == "TOPLEFT" and db.pos[2] == "BOTTOMLEFT" then
+			db.pos[3], db.pos[4] = db.pos[3] * old / s, db.pos[4] * old / s
+		end
 		if frame then
 			frame:SetScale(s)
-			if frame:IsShown() then SavePosition() end
+			if db.pos then
+				frame:ClearAllPoints()
+				frame:SetPoint(db.pos[1], UIParent, db.pos[2], db.pos[3], db.pos[4])
+			end
 		end
 	elseif cmd == "återställ" or cmd == "reset" then
 		db.pos, db.scale = nil, 1

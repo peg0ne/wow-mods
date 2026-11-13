@@ -70,6 +70,9 @@ local function Broadcast()
 	if not l or not ns.InOurGuild() then return end
 	ns.Send(string.format("J;%s;%d;%d;%d;%d;%d;%d;%s", ns.VERSION, l.id, l.tank, l.heal, l.dps,
 		l.quest or 0, UnitLevel("player") or 0, l.text))
+	-- How long it has been up, so others show the right age. Separate from
+	-- J, whose text runs to the end; clients before 0.7 ignore it.
+	ns.Send(string.format("A;%d;%d", l.id, math.max(0, time() - l.posted)))
 	l.lastSent = time()
 end
 
@@ -126,8 +129,7 @@ function ns.Invite(name)
 	local l = ns.myListing
 	local a = l and l.applicants[name]
 	if not a then return end
-	if C_PartyInfo and C_PartyInfo.InviteUnit then C_PartyInfo.InviteUnit(name)
-	elseif InviteUnit then InviteUnit(name) end
+	Statskontoret.Invite(name)
 	ns.SendTo(name, "I;" .. l.id)
 	if not a.invited then
 		a.invited = true
@@ -170,6 +172,13 @@ function ns.OnPlatsGuild(sender, parts)
 				sender, ns.NeedsText(l), text, mine))
 		end
 		ns.Changed()
+	elseif parts[1] == "A" then
+		local l = ns.listings[sender]
+		local age = tonumber(parts[3])
+		if l and tostring(l.id) == parts[2] and age then
+			l.posted = time() - age
+			ns.Changed()
+		end
 	elseif parts[1] == "X" then
 		local l = ns.listings[sender]
 		if l and tostring(l.id) == parts[2] then
@@ -227,12 +236,16 @@ end
 
 function ns.PlatsLogin()
 	local saved = ns.char.listing
-	if saved and time() - (saved.posted or 0) < LIFETIME then
-		ns.myListing = { id = saved.id, tank = saved.tank, heal = saved.heal, dps = saved.dps, quest = saved.quest,
-			text = saved.text, posted = saved.posted, applicants = {} }
-		Broadcast()
-	else
-		ns.char.listing = nil
+	-- A listing posted in the seconds since login is newer than the saved
+	-- copy and may already have applicants, so it stays as it is.
+	if not ns.myListing then
+		if saved and time() - (saved.posted or 0) < LIFETIME then
+			ns.myListing = { id = saved.id, tank = saved.tank, heal = saved.heal, dps = saved.dps, quest = saved.quest,
+				text = saved.text, posted = saved.posted, applicants = {} }
+			Broadcast()
+		else
+			ns.char.listing = nil
+		end
 	end
 	C_Timer.NewTicker(30, function()
 		local now, changed = time(), false

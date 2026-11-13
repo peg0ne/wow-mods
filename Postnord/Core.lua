@@ -18,7 +18,7 @@ local GUILD = "THÖNDERSTÖRM"
 
 local db
 local mine          -- this pack's version, or nil for "dev"
-local told = false  -- the notice was shown this session
+local told = nil    -- the version the notice was shown for this session
 local answerAt      -- when we answer someone on an older version
 local lastAnswer = 0
 
@@ -40,9 +40,7 @@ end
 
 local function Send(msg)
 	if not InOurGuild() then return end
-	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-		C_ChatInfo.SendAddonMessage(PREFIX, msg, "GUILD")
-	end
+	Statskontoret.SendAddon(PREFIX, msg, "GUILD")
 end
 
 local function Announce()
@@ -50,8 +48,10 @@ local function Announce()
 end
 
 local function Notice()
-	if told or not mine or Number(db.newest) <= Number(mine) then return end
-	told = true
+	-- Once per version: a release that comes out later in the session is
+	-- announced too.
+	if not mine or Number(db.newest) <= Number(mine) or Number(db.newest) <= Number(told) then return end
+	told = db.newest
 	Print(format("|cffff4040ny version av gildets addons: %s|r (du har %s). Uppdatera guild-addons i WowUp och skriv /reload.",
 		db.newest, mine))
 end

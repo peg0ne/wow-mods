@@ -76,11 +76,7 @@ end
 
 local function Send(msg)
 	if not IsInGuild() then return end
-	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-		C_ChatInfo.SendAddonMessage(ns.PREFIX, msg, "GUILD")
-	elseif SendAddonMessage then
-		SendAddonMessage(ns.PREFIX, msg, "GUILD")
-	end
+	Statskontoret.SendAddon(ns.PREFIX, msg, "GUILD")
 end
 
 local function Changed()
@@ -143,18 +139,21 @@ end
 ---------------------------------------------------------------------------
 -- Sharing.
 
+-- The figures as sent, and the same without play time: played grows every
+-- second, so it is left out when deciding whether anything changed.
 local function Figures()
 	local f = { UnitLevel("player"), select(2, UnitClass("player")) or "" }
 	for _, key in ipairs(FIELDS) do table.insert(f, math.floor(char[key] or 0)) end
+	local steady = table.concat(f, ";")
 	table.insert(f, math.floor(ns.Played() or 0))
-	return table.concat(f, ";")
+	return table.concat(f, ";"), steady
 end
 
 local function SendFigures(force)
 	if not char or not ns.InOurGuild() then return end
-	local figures = Figures()
-	if not force and figures == lastSent then return end
-	lastSent, lastSentAt = figures, GetTime()
+	local figures, steady = Figures()
+	if not force and steady == lastSent then return end
+	lastSent, lastSentAt = steady, GetTime()
 	Send(string.format("S;%s;%s;%d", ns.VERSION, figures, time()))
 end
 
@@ -353,7 +352,7 @@ events:SetScript("OnEvent", function(_, event, ...)
 		lastMoney = GetMoney()
 		local register = C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix or RegisterAddonMessagePrefix
 		if register then register(ns.PREFIX) end
-		if C_GuildInfo and C_GuildInfo.GuildRoster then C_GuildInfo.GuildRoster() end
+		Statskontoret.RequestRoster()
 		C_Timer.After(20, function()
 			SendFigures(true)
 			ns.Ask()
