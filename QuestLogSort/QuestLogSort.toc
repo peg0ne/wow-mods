@@ -2,7 +2,7 @@
 ## Title: QuestLogSort
 ## Category: Quests
 ## IconTexture: Interface\Icons\INV_Misc_Book_08
-## Notes: Completed quests last in the quest log (per zone) and in the quest tracker, which is also sorted by level.
-## Version: 1.4
+## Notes: Completed quests last in the quest log (per zone) and in the quest tracker, which is also sorted by level, or zone by zone. /qls for options.
+## Version: 1.5
 ## SavedVariables: QuestLogSortDB
 QuestLogSort.lua

@@ -127,8 +127,8 @@ end)
 TryHook()
 
 -- Quest tracker on screen: it lists watched quests in watch-list order, so
--- quests are put in order by unwatching and watching them again. Unfinished
--- quests first, then completed ones, each by level (ties in quest log order).
+-- quests are put in order by unwatching and watching them again, in the
+-- order Desired gives (ties in quest log order).
 -- This only uses the quest API and never touches the tracker's own code, so
 -- it can't cause blocked actions in combat.
 local Watch = C_QuestLog
@@ -154,17 +154,45 @@ local function WatchedQuests()
 	return ids
 end
 
+-- Tracker order, chosen with /qls zon or /qls nivå:
+--   "level" (default): unfinished first, then completed, each by level.
+--   "zone": zone by zone in quest log order; within a zone unfinished
+--   first, then completed, each by level.
+local function ByZone()
+	return QuestLogSortDB and QuestLogSortDB.trackerMode == "zone"
+end
+
+-- Each quest's zone as the position of its header in the quest log, so
+-- zones keep the order the log shows them in.
+local function ZoneOrder()
+	local zones = {}
+	if not (Watch.GetNumQuestLogEntries and Watch.GetInfo) then return zones end
+	local header = 0
+	for i = 1, (Watch.GetNumQuestLogEntries()) do
+		local info = Watch.GetInfo(i)
+		if info and info.isHeader then
+			header = header + 1
+		elseif info and info.questID then
+			zones[info.questID] = header
+		end
+	end
+	return zones
+end
+
 local function Desired(ids)
 	local key = {}
+	local zones = ByZone() and ZoneOrder() or nil
 	for _, id in ipairs(ids) do
 		local index = Watch.GetLogIndexForQuestID and Watch.GetLogIndexForQuestID(id) or 9999
 		local info = Watch.GetInfo and Watch.GetInfo(index)
 		if info and info.questID == id and info.level and info.level > 0 then levels[id] = info.level end
-		key[id] = { done = Watch.IsComplete(id) and 1 or 0, level = levels[id] or 0, index = index }
+		key[id] = { done = Watch.IsComplete(id) and 1 or 0, level = levels[id] or 0, index = index,
+			zone = zones and zones[id] or 0 }
 	end
 	local sorted = { unpack(ids) }
 	table.sort(sorted, function(a, b)
 		local ka, kb = key[a], key[b]
+		if ka.zone ~= kb.zone then return ka.zone < kb.zone end
 		if ka.done ~= kb.done then return ka.done < kb.done end
 		if ka.level ~= kb.level then return ka.level < kb.level end
 		if ka.index ~= kb.index then return ka.index < kb.index end
@@ -300,6 +328,21 @@ SLASH_QUESTLOGSORT2 = "/questlogsort"
 SlashCmdList.QUESTLOGSORT = function(msg)
 	if not ready then return end
 	msg = strtrim(msg or ""):lower()
+	local zone = msg == "zon" or msg == "zone"
+	if zone or msg == "nivå" or msg == "niva" or msg == "level" then
+		QuestLogSortDB.trackerMode = zone and "zone" or nil
+		failedOrder = nil -- the new order deserves a try
+		Say(zone and "trackern sorteras nu zon för zon: oklara först, sedan klara, efter nivå inom varje zon."
+			or "trackern sorteras nu efter nivå: oklara först, sedan klara.")
+		if not Enabled() then
+			Say("sorteringen är avstängd just nu; /qls på slår på den.")
+		elseif InCombat() then
+			trackerAfterCombat = true
+		else
+			QueueTrackerSort()
+		end
+		return
+	end
 	local on
 	if msg == "av" or msg == "off" then
 		on = false
@@ -309,7 +352,8 @@ SlashCmdList.QUESTLOGSORT = function(msg)
 		on = QuestLogSortDB.disabled -- no argument toggles
 	else
 		Say("/qls av stänger av all sortering (questloggen och trackern), /qls på slår på den igen. "
-			.. "Nu: " .. (Enabled() and "på" or "av") .. ".")
+			.. "/qls zon sorterar trackern zon för zon, /qls nivå bara efter nivå. "
+			.. "Nu: " .. (Enabled() and "på" or "av") .. ", trackern " .. (ByZone() and "zon för zon" or "efter nivå") .. ".")
 		return
 	end
 	QuestLogSortDB.disabled = not on or nil
