@@ -2,7 +2,7 @@
 ## Title: Handläggaren
 ## Category: Quests
 ## IconTexture: Interface\Icons\INV_Misc_Note_01
-## Notes: Quest paperwork, handled: accepts quests and turns in finished ones automatically (hold Shift to skip), marks the most valuable reward, and can share new quests with your group. /hl for settings.
-## Version: 0.3
+## Notes: Quest paperwork, handled: accepts quests and turns in finished ones automatically (hold Shift to skip), marks the most valuable reward, can share new quests with your group, and tells your party when a quest's objectives are done, like Questie. /hl for settings.
+## Version: 0.4
 ## SavedVariables: HandlaggarenDB
 Core.lua

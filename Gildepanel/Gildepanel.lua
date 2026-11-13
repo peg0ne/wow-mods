@@ -860,6 +860,7 @@ local SETTINGS = {
 		{ key = "gossip", label = "Välj NPC:ns enda pratval" },
 		{ key = "trivial", label = "Ta gråa uppdrag" },
 		{ key = "shared", label = "Ta uppdrag som gruppen delar" },
+		{ key = "announce", label = "Säg till gruppen när ett uppdrag är klart", default = true },
 	} },
 	{ addon = "Kolapp", title = "Kölapp", db = "KolappDB", items = {
 		{ key = "chat", label = "Questkedjor i chatten", default = true },

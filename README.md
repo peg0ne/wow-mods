@@ -66,7 +66,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Rattsmedicinalverket | 0.5 | Works in game (killer, level, ability, position from the Death Recap); 0.4 stops a second "unknown cause" record when `PLAYER_DEAD` fires again for the same death |
 | Polisen | 0.4 | Works in game; reports need a death to a hostile player. 0.4: battleground and arena deaths and sightings are ignored; catching up after login no longer misses incidents (asks from where it was last complete, pages through long gaps, server time). Full catch-up needs the answering member on 0.4 too |
 | Dodsannonser | 0.6 | Works in game (level-up notices since 0.4; hunter pet level-ups since 0.5, preview with `/dodsannons test husdjur`, off with `/dodsannons husdjur`) |
-| Handlaggaren | 0.3 | Works in game; 0.3 leaves repeatable quests alone (`/hl upprepade` to take them) and never picks a reward before every choice has loaded |
+| Handlaggaren | 0.4 | Works in game; 0.3 leaves repeatable quests alone (`/hl upprepade` to take them) and never picks a reward before every choice has loaded. 0.4 says in party chat when a quest's objectives are done, like Questie (`/hl meddela` turns it off); not yet tested in game |
 | SCB | 0.4 | Works in game; saves the whole guild roster (rank, class, level, notes, last online) to `SCBDB.roster` |
 | Kolapp | 0.4 | Works in game: quest tracker numbers and the quest on item tooltips; 0.4 only changes the tracker's shown text, which stops the "blocked action" errors in combat |
 | Revisorsinspektionen | 0.1 | Works in game |
@@ -134,6 +134,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 - Quests a party member shares are left for you to accept or decline unless `/hl delade` (or the checkbox in `/gpanel addons`).
 - With several rewards it marks the one with the highest sell price with a coin icon. `/hl belöning` picks it automatically and prints what was chosen.
 - `/hl dela` shares newly accepted quests with your group (off by default). `/hl prat` chooses an NPC's only chat option (off by default, because some single options set your hearthstone or open a vendor).
+- In a party it says in party chat when one of your quests has all its objectives done, like Questie: "{rt1} Handläggaren: klart: [Quest]". Only on the change to done, never for quests already done at login or when accepted. Not in battlegrounds or arenas. `/hl meddela` turns it off.
 - `/hl` shows the settings, `/hl av` / `/hl på` turns the whole addon off or on.
 
 ### Kölapp: quest chain position (built, v0.2)

@@ -9,7 +9,8 @@
 -- (set your home, open a vendor). Quests a party member shares are left
 -- for you to accept or decline unless /hl delade. Repeatable quests
 -- (Runecloth and other turn-ins that use up items) are left alone unless
--- /hl upprepade.
+-- /hl upprepade. In a party, says in party chat when one of your quests
+-- has all its objectives done, as Questie does (/hl meddela turns it off).
 --
 -- Written for Forever's retail-based client (C_GossipInfo), with the older
 -- quest greeting functions for NPCs that use that window instead.
@@ -22,6 +23,7 @@ local defaults = {
 	trivial = false,  -- also take gray quests
 	shared = false,   -- accept quests a party member shares
 	repeatable = false, -- also pick up repeatable quests (turn-ins that use up items)
+	announce = true,  -- tell the party when a quest's objectives are done
 }
 
 local db
@@ -211,10 +213,74 @@ local function OnAccepted(questID)
 end
 
 ---------------------------------------------------------------------------
+-- Telling the party when a quest is done.
+
+-- questID -> whether its objectives were done at the last look. A quest
+-- seen for the first time (after login, or just accepted with the items
+-- already in your bags) is only noted, so nothing is announced twice.
+local wasDone = {}
+
+local function QuestLogDone()
+	local now = {}
+	if C_QuestLog and C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetInfo and C_QuestLog.IsComplete then
+		for i = 1, C_QuestLog.GetNumQuestLogEntries() do
+			local info = C_QuestLog.GetInfo(i)
+			if info and not info.isHeader and info.questID and info.questID > 0 then
+				now[info.questID] = { done = C_QuestLog.IsComplete(info.questID) and true or false, title = info.title }
+			end
+		end
+	elseif GetNumQuestLogEntries and GetQuestLogTitle then
+		for i = 1, GetNumQuestLogEntries() do
+			local title, _, _, isHeader, _, isComplete, _, questID = GetQuestLogTitle(i)
+			if not isHeader and questID then now[questID] = { done = isComplete == 1, title = title } end
+		end
+	end
+	return now
+end
+
+local function InParty()
+	if not IsInGroup(LE_PARTY_CATEGORY_HOME) then return false end
+	-- Battleground and arena groups have no use for your quests.
+	local _, kind = IsInInstance()
+	return kind ~= "pvp" and kind ~= "arena"
+end
+
+local function Announce(questID, title)
+	local link = GetQuestLink and GetQuestLink(questID)
+	local text = string.format("{rt1} Handläggaren: klart: %s", link or ("[" .. (title or questID) .. "]"))
+	local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
+	-- pcall: the client can refuse addon chat (in some instance fights).
+	if send then pcall(send, text, "PARTY") end
+end
+
+local function CheckQuests()
+	local now = QuestLogDone()
+	if db.announce and InParty() then
+		for id, q in pairs(now) do
+			if q.done and wasDone[id] == false then Announce(id, q.title) end
+		end
+	end
+	wasDone = {}
+	for id, q in pairs(now) do wasDone[id] = q.done end
+end
+
+-- QUEST_LOG_UPDATE comes in bursts; look once it has settled.
+local checkPending = false
+local function QueueCheck()
+	if checkPending then return end
+	checkPending = true
+	C_Timer.After(0.3, function()
+		checkPending = false
+		CheckQuests()
+	end)
+end
+
+---------------------------------------------------------------------------
 
 local events = CreateFrame("Frame")
 for _, event in ipairs({ "ADDON_LOADED", "GOSSIP_SHOW", "QUEST_GREETING", "QUEST_DETAIL",
-	"QUEST_PROGRESS", "QUEST_COMPLETE", "QUEST_ACCEPTED", "GOSSIP_CLOSED", "QUEST_FINISHED" }) do
+	"QUEST_PROGRESS", "QUEST_COMPLETE", "QUEST_ACCEPTED", "GOSSIP_CLOSED", "QUEST_FINISHED",
+	"QUEST_LOG_UPDATE" }) do
 	pcall(events.RegisterEvent, events, event)
 end
 
@@ -233,6 +299,7 @@ events:SetScript("OnEvent", function(_, event, ...)
 	elseif event == "QUEST_GREETING" then OnGreeting()
 	elseif event == "QUEST_DETAIL" then OnDetail()
 	elseif event == "QUEST_PROGRESS" then OnProgress()
+	elseif event == "QUEST_LOG_UPDATE" then QueueCheck()
 	elseif event == "QUEST_COMPLETE" then
 		rewardScreen = rewardScreen + 1
 		OnComplete()
@@ -263,6 +330,7 @@ local SETTINGS = {
 	{ "trivial", "grå", "ta gråa uppdrag" },
 	{ "shared", "delade", "ta uppdrag som gruppen delar" },
 	{ "repeatable", "upprepade", "ta upprepningsbara uppdrag" },
+	{ "announce", "meddela", "säg till gruppen när ett uppdrag är klart" },
 }
 
 local function Status()
@@ -283,10 +351,10 @@ SlashCmdList.HANDLAGGAREN = function(msg)
 		Status()
 		return
 	end
-	local aliases = { ["belöning"] = "pickBest", beloning = "pickBest", dela = "share", prat = "gossip", ["grå"] = "trivial", gra = "trivial", delade = "shared", upprepade = "repeatable" }
+	local aliases = { ["belöning"] = "pickBest", beloning = "pickBest", dela = "share", prat = "gossip", ["grå"] = "trivial", gra = "trivial", delade = "shared", upprepade = "repeatable", meddela = "announce" }
 	local key = aliases[cmd]
 	if not key then
-		Print("/hl visar inställningarna. /hl av | på, /hl belöning, /hl dela, /hl prat, /hl grå, /hl delade, /hl upprepade slår av eller på.")
+		Print("/hl visar inställningarna. /hl av | på, /hl belöning, /hl dela, /hl prat, /hl grå, /hl delade, /hl upprepade, /hl meddela slår av eller på.")
 		return
 	end
 	db[key] = not db[key]
