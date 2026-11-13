@@ -111,6 +111,14 @@ function S.SendAddon(prefix, msg, channel, target)
 	end
 end
 
+-- In a battleground or arena: deaths and enemy players there are part of
+-- the game, not something to report to the guild.
+function S.InPvPInstance()
+	if not IsInInstance then return false end
+	local _, kind = IsInInstance()
+	return kind == "pvp" or kind == "arena"
+end
+
 function S.Invite(name)
 	if C_PartyInfo and C_PartyInfo.InviteUnit then
 		C_PartyInfo.InviteUnit(name)

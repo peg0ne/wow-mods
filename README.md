@@ -11,7 +11,7 @@ Guild addons are named after Swedish public institutions and companies.
 | Skatteverket | Guild tax on looted gold, vendor and auction sales; standings in `/skatt` |
 | Swedbank | Guild loans; only the guild leader sees applications |
 | Gildepanel | A compact bar (`/gpanel`) that drops open on hover into a panel: your Skatteverket standing and tax, the favourites, who is online, your Swedbank loans. The Addons window (`/gpanel addons`) opens the other addons' windows and toggles their automatic settings and sets the max camera distance (`/gpanel kamera`); turns herb/mineral tracking back on after login (`/gpanel spårning`); warns an hour of play before your standing drops; celebrates with a gold flash, a banner, flying coins and a fanfare when you pay your tax (`/gpanel firande`, preview with `/gpanel firande test`) |
-| QuestLogSort | Puts completed quests last in the quest log and tracker; sorts the tracker by level |
+| QuestLogSort | Puts completed quests last in the quest log and tracker; sorts the tracker by level. Waits until combat ends before reordering either |
 | Statskontoret | Shared code the other addons depend on: the guild window (top-level, so windows stack cleanly), addon messages, roster requests, invites, class colors. Shows nothing itself |
 | Postnord | Tells you in chat when a guildmate runs a newer release of this addon pack (`/postnord`). The release workflow stamps the tag into `Postnord.toc`; a copy run from the repo says `dev`, sends nothing and never warns |
 
@@ -64,11 +64,11 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Skolverket | 0.5 | Works in game: cooldowns and the item tooltip (reads Skatteverket's recipes) |
 | Eniro | 0.3 | Works in game: member list; position sharing needs a second member online to test |
 | Rattsmedicinalverket | 0.5 | Works in game (killer, level, ability, position from the Death Recap); 0.4 stops a second "unknown cause" record when `PLAYER_DEAD` fires again for the same death |
-| Polisen | 0.4 | Works in game; reports need a death to a hostile player |
+| Polisen | 0.4 | Works in game; reports need a death to a hostile player. Battleground and arena deaths and sightings are ignored |
 | Dodsannonser | 0.6 | Works in game (level-up notices since 0.4; hunter pet level-ups since 0.5, preview with `/dodsannons test husdjur`, off with `/dodsannons husdjur`) |
 | Handlaggaren | 0.3 | Works in game; 0.3 leaves repeatable quests alone (`/hl upprepade` to take them) and never picks a reward before every choice has loaded |
 | SCB | 0.4 | Works in game; saves the whole guild roster (rank, class, level, notes, last online) to `SCBDB.roster` |
-| Kolapp | 0.3 | Works in game: quest tracker numbers and the quest on item tooltips |
+| Kolapp | 0.4 | Works in game: quest tracker numbers and the quest on item tooltips; 0.4 only changes the tracker's shown text, which stops the "blocked action" errors in combat |
 | Revisorsinspektionen | 0.1 | Works in game |
 | Statskontoret | 0.1 | New: shared library; not yet tested in game |
 

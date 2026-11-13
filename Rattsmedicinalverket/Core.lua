@@ -287,6 +287,9 @@ local function OnDeath()
 	-- so a second record would be an "unknown cause" duplicate.
 	if dead then return end
 	dead = true
+	-- Battleground and arena deaths are not recorded: no obituaries, no
+	-- Polisen reports, nothing sent to the guild.
+	if Statskontoret.InPvPInstance() then return end
 	local stamp = time()
 	local victim = Me() or UnitName("player")
 	local map, x, y = Position()

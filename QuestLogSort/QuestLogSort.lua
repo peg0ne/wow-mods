@@ -8,6 +8,16 @@
 
 local hooked, lastError = false, nil
 
+-- Nothing is reordered in combat (dungeons are mostly combat). Re-watching
+-- quests rebuilds the tracker, which can't move its quest item buttons in
+-- combat, and writing to the map's quest rows from addon code then would
+-- risk "blocked action" errors on the world map. Both catch up when combat
+-- ends.
+local function InCombat()
+	return InCombatLockdown and InCombatLockdown()
+end
+local logPending = false
+
 -- Quests in the same zone have consecutive layoutIndex values (the zone
 -- header sits just before them), so a gap starts a new zone.
 local function Groups()
@@ -71,6 +81,7 @@ local function TryHook()
 	end
 	hooked = true
 	hooksecurefunc("QuestLogQuests_Update", function()
+		if InCombat() then logPending = true return end
 		local ok, err = pcall(Reorder)
 		if not ok and err ~= lastError then
 			lastError = err
@@ -78,7 +89,7 @@ local function TryHook()
 		end
 	end)
 	-- The log may already be built; sort it now too.
-	pcall(Reorder)
+	if not InCombat() then pcall(Reorder) end
 end
 
 -- The quest log may be loaded after this addon; hook it once it exists.
@@ -165,8 +176,11 @@ local function Signature(ids)
 	return table.concat(ids, ",")
 end
 
+local trackerAfterCombat = false
+
 local function SortTracker()
 	trackerPending = false
+	if InCombat() then trackerAfterCombat = true return end
 	local ids = WatchedQuests()
 	if #ids < 2 then return end
 	local desired = Desired(ids)
@@ -231,4 +245,19 @@ trackerEvents:RegisterEvent("QUEST_WATCH_LIST_CHANGED")
 trackerEvents:RegisterEvent("QUEST_ACCEPTED")
 trackerEvents:RegisterEvent("QUEST_REMOVED")
 trackerEvents:RegisterEvent("ZONE_CHANGED_NEW_AREA")
-trackerEvents:SetScript("OnEvent", QueueTrackerSort)
+trackerEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
+trackerEvents:SetScript("OnEvent", function(_, event)
+	if event == "PLAYER_REGEN_ENABLED" then
+		-- Combat is over: do what was held back.
+		if logPending then
+			logPending = false
+			-- Reorder the rows as they are; calling Blizzard's update from
+			-- here would run it as addon code.
+			if QuestScrollFrame and QuestScrollFrame:IsVisible() then pcall(Reorder) end
+		end
+		if not trackerAfterCombat then return end
+		trackerAfterCombat = false
+	end
+	if InCombat() then trackerAfterCombat = true return end
+	QueueTrackerSort()
+end)

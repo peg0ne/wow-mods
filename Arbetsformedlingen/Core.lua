@@ -169,16 +169,42 @@ local function ReadLog()
 	char.cache = cache
 	ns.mine = mine
 	for id, q in pairs(mine) do
-		if q.title then char.titles[id] = { title = q.title, level = q.level, zone = q.zone } end
+		if q.title then char.titles[id] = { title = q.title, level = q.level, zone = q.zone, seen = time() } end
 	end
 end
 ns.ReadLog = function() if char then ReadLog() end end
 
+-- Learned names are kept while they are in use. Each login drops those not
+-- used for TITLE_DAYS, and the oldest beyond TITLE_MAX; a name that is still
+-- needed is simply asked for again.
+local TITLE_DAYS, TITLE_MAX = 30, 500
+
+local function PruneTitles()
+	local now, list = time(), {}
+	for id, t in pairs(char.titles) do
+		-- Names saved before 0.7 have no stamp; count them as seen now.
+		if type(t) == "table" then t.seen = t.seen or now end
+		if type(t) ~= "table" or now - t.seen > TITLE_DAYS * 86400 then
+			char.titles[id] = nil
+		else
+			list[#list + 1] = id
+		end
+	end
+	if #list <= TITLE_MAX then return end
+	table.sort(list, function(a, b) return char.titles[a].seen > char.titles[b].seen end)
+	for i = TITLE_MAX + 1, #list do char.titles[list[i]] = nil end
+end
+
 -- Name, level and zone of any quest: our own log, names we have learned,
 -- or the game's quest cache. nil when nobody has told us yet.
 function ns.QuestInfo(id)
-	local q = ns.mine[id] or (char and char.titles[id])
+	local q = ns.mine[id]
 	if q and q.title then return q end
+	q = char and char.titles[id]
+	if q and q.title then
+		q.seen = time()   -- still in use; see PruneTitles
+		return q
+	end
 	local title = C_QuestLog and C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(id)
 	if not title and C_QuestLog and C_QuestLog.GetQuestInfo then title = C_QuestLog.GetQuestInfo(id) end
 	if title and title ~= "" then return { title = title } end
@@ -233,7 +259,7 @@ local function OnName(parts)
 	if not id or not parts[5] or parts[5] == "" then return end
 	answered[id] = true
 	if not ns.mine[id] then
-		char.titles[id] = { title = parts[5], level = tonumber(parts[3]), zone = parts[4] ~= "" and parts[4] or nil }
+		char.titles[id] = { title = parts[5], level = tonumber(parts[3]), zone = parts[4] ~= "" and parts[4] or nil, seen = time() }
 		Changed()
 	end
 end
@@ -445,6 +471,7 @@ events:SetScript("OnEvent", function(_, event, ...)
 			char = ArbetsformedlingenCharDB
 			char.cache = char.cache or {}
 			char.titles = char.titles or {}
+			PruneTitles()
 			ns.char = char
 		end
 	elseif not char then

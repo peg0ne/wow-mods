@@ -61,7 +61,7 @@ end
 -- Gossip windows (most NPCs).
 
 local function OnGossip()
-	skipping = IsShiftKeyDown()
+	skipping = skipping or IsShiftKeyDown()   -- stays on until the conversation ends
 	if not Active() or not C_GossipInfo then return end
 	-- Finished quests first.
 	for _, q in ipairs(C_GossipInfo.GetActiveQuests and C_GossipInfo.GetActiveQuests() or {}) do
@@ -89,7 +89,7 @@ end
 
 -- The older quest greeting window (NPCs with only quests).
 local function OnGreeting()
-	skipping = IsShiftKeyDown()
+	skipping = skipping or IsShiftKeyDown()   -- stays on until the conversation ends
 	if not Active() then return end
 	-- This window gives titles, not quest IDs; the title stands in for the ID.
 	for i = 1, (GetNumActiveQuests and GetNumActiveQuests() or 0) do
@@ -241,10 +241,17 @@ events:SetScript("OnEvent", function(_, event, ...)
 		local a, b = ...
 		OnAccepted(b or a)
 	elseif event == "GOSSIP_CLOSED" or event == "QUEST_FINISHED" then
-		-- The conversation is over; the next one decides afresh.
 		rewardScreen = rewardScreen + 1
-		skipping = false
 		if marker then marker:Hide() end
+		-- These also fire when the NPC's chat window hands over to the quest
+		-- window (or back), which is still the same conversation: Shift held
+		-- when it opened must keep skipping. Decide afresh only once neither
+		-- window is open.
+		C_Timer.After(0.2, function()
+			local gossip = GossipFrame and GossipFrame:IsShown()
+			local quest = QuestFrame and QuestFrame:IsShown()
+			if not gossip and not quest then skipping = false end
+		end)
 	end
 end)
 

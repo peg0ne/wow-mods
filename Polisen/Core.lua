@@ -300,6 +300,8 @@ local function Plain(v)
 end
 
 local function CheckUnit(unit)
+	-- Every enemy in a battleground or arena is there to fight; no sightings.
+	if Statskontoret.InPvPInstance() then return end
 	if not unit or not UnitExists(unit) or not Plain(UnitIsPlayer(unit)) then return end
 	if UnitIsFriend and Plain(UnitIsFriend("player", unit)) then return end
 	local guid, name = Plain(UnitGUID(unit)), Plain(UnitName(unit))
@@ -311,7 +313,7 @@ local function OnSeen(sender, f)
 	local s = ns.Suspect(guid, name)
 	if not s then return end
 	heardSeen[s.key] = GetTime()
-	if db.quiet then return end
+	if db.quiet or Statskontoret.InPvPInstance() then return end
 	if GetTime() - (warned["g:" .. s.key] or -999) < WARN_EVERY then return end
 	warned["g:" .. s.key] = GetTime()
 	Alarm(s, zone, level, sender)

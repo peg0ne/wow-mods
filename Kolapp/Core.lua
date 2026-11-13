@@ -167,8 +167,13 @@ end
 ---------------------------------------------------------------------------
 -- Quest tracker. Its blocks set their title through a SetHeader method
 -- (newer trackers, one copy per block mixin) or the module's SetBlockHeader
--- (older ones). After it runs we call it again with the label added, so the
--- tracker measures the longer title itself before laying the block out.
+-- (older ones). After it runs we add the label to the title's font string
+-- only. Calling SetHeader again from here (as 0.3 did) ran the tracker's
+-- own code from addon code: every field it wrote on the block was tainted,
+-- the tracker's layout read them, and in combat that ended in "Kolapp has
+-- been blocked from an action". Changing only the shown text touches no
+-- field the tracker reads. The block was sized for the plain title, so the
+-- label is only added when it fits on the lines the title already uses.
 -- A block is only labelled when its title contains the quest's title, so
 -- blocks for achievements or other things with the same ID are left alone.
 
@@ -184,6 +189,18 @@ local function TrackerLabel(block, text)
 	if label and not text:find(label, 1, true) then return label end
 end
 
+local function ShowLabel(block, text, label)
+	local header = block.HeaderText
+	if not header or not header.SetText then return end
+	local lines = header.GetNumLines and header:GetNumLines()
+	header:SetText(text .. " " .. label)
+	-- The tracker already sized the block for the title; if the label would
+	-- need another line or get cut off, leave the title as it was.
+	if (header.IsTruncated and header:IsTruncated()) or (lines and header:GetNumLines() > lines) then
+		header:SetText(text)
+	end
+end
+
 local function HookTracker()
 	for name, value in pairs(_G) do
 		if type(value) == "table" and not hookedTables[value] and type(name) == "string" then
@@ -191,13 +208,13 @@ local function HookTracker()
 				hookedTables[value] = true
 				hooksecurefunc(value, "SetHeader", function(block, text)
 					local ok, label = pcall(TrackerLabel, block, text)
-					if ok and label then block:SetHeader(text .. " " .. label) end
+					if ok and label then ShowLabel(block, text, label) end
 				end)
 			elseif name:find("TRACKER_MODULE") and type(rawget(value, "SetBlockHeader")) == "function" then
 				hookedTables[value] = true
-				hooksecurefunc(value, "SetBlockHeader", function(module, block, text)
+				hooksecurefunc(value, "SetBlockHeader", function(_, block, text)
 					local ok, label = pcall(TrackerLabel, block, text)
-					if ok and label then module:SetBlockHeader(block, text .. " " .. label) end
+					if ok and label then ShowLabel(block, text, label) end
 				end)
 			end
 		end

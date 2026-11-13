@@ -25,6 +25,7 @@ globals = {
 -- Game API and UI globals the addons read. Some are only fallbacks for older
 -- clients (see "The Forever client" in README.md).
 read_globals = {
+	"GossipFrame", "InCombatLockdown", "QuestFrame",
 	"AcceptQuest", "Ambiguate", "BackdropTemplateMixin", "BokforingFrame",
 	"COMBATLOG_OBJECT_REACTION_HOSTILE", "COMBATLOG_OBJECT_TYPE_GUARDIAN",
 	"COMBATLOG_OBJECT_TYPE_PET", "COMBATLOG_OBJECT_TYPE_PLAYER", "COMBATLOG_XPGAIN_FIRSTPERSON",
