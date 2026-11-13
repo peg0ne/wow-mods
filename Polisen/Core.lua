@@ -91,31 +91,8 @@ function ns.IsMe(name)
 	return name == UnitName("player") or (name and name:match("^(%S+)") == UnitName("player"))
 end
 
----------------------------------------------------------------------------
--- Sending: a burst of 8, then one a second (the server drops floods).
-
-local outbox, tokens, lastRefill, pumping = {}, 8, 0, false
-
-local function Pump()
-	local now = GetTime()
-	tokens = math.min(8, tokens + (now - lastRefill))
-	lastRefill = now
-	while tokens >= 1 and #outbox > 0 do
-		local msg = table.remove(outbox, 1)
-		Statskontoret.SendAddon(ns.PREFIX, msg, "GUILD")
-		tokens = tokens - 1
-	end
-	if #outbox > 0 then C_Timer.After(1, Pump) else pumping = false end
-end
-
-local function Send(msg)
-	if not IsInGuild() then return end
-	table.insert(outbox, msg)
-	if not pumping then
-		pumping = true
-		Pump()
-	end
-end
+-- Throttled: the server drops floods (see Statskontoret.Sender).
+local Send = Statskontoret.Sender(ns.PREFIX)
 
 ---------------------------------------------------------------------------
 -- Incidents and suspects.

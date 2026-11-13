@@ -93,35 +93,8 @@ end
 -- Sending. The server drops addon messages sent too fast, so everything
 -- goes through a queue: a burst of 8, then one a second.
 
-local outbox, tokens, lastRefill, pumping = {}, 8, 0, false
-
-local function RawSend(msg)
-	Statskontoret.SendAddon(ns.PREFIX, msg, "GUILD")
-end
-
-local function Pump()
-	local now = GetTime()
-	tokens = math.min(8, tokens + (now - lastRefill))
-	lastRefill = now
-	while tokens >= 1 and #outbox > 0 do
-		RawSend(table.remove(outbox, 1))
-		tokens = tokens - 1
-	end
-	if #outbox > 0 then
-		C_Timer.After(1, Pump)
-	else
-		pumping = false
-	end
-end
-
-local function Send(msg)
-	if not IsInGuild() then return end
-	table.insert(outbox, msg)
-	if not pumping then
-		pumping = true
-		Pump()
-	end
-end
+-- Throttled: the server drops floods (see Statskontoret.Sender).
+local Send = Statskontoret.Sender(ns.PREFIX)
 
 ---------------------------------------------------------------------------
 -- Recipe names: own scans give names directly; other members' recipes are

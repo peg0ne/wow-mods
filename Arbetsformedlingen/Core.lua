@@ -87,15 +87,17 @@ function ns.IsMe(name)
 	return name == UnitName("player") or (name and name:match("^(%S+)") == UnitName("player"))
 end
 
-local function Send(msg)
-	if not IsInGuild() then return end
-	Statskontoret.SendAddon(ns.PREFIX, msg, "GUILD")
+-- Throttled: the server drops floods (see Statskontoret.Sender). Lists,
+-- name answers and Platsbanken all share the one prefix, so one queue.
+local Queue = Statskontoret.Sender(ns.PREFIX)
+local function Send(msg, check)
+	Queue(msg, "GUILD", nil, check)
 end
 ns.Send = Send
 
 -- An addon whisper to one member.
 function ns.SendTo(target, msg)
-	Statskontoret.SendAddon(ns.PREFIX, msg, "WHISPER", target)
+	Queue(msg, "WHISPER", target)
 end
 
 local function Changed()
@@ -245,10 +247,15 @@ local function OnWhat(parts)
 			answered[id] = nil
 			C_Timer.After(math.random() * 3, function()
 				if answered[id] then return end
-				answered[id] = true
 				local title = q.title:gsub(";", ","):sub(1, 150)
 				local zone = (q.zone or ""):gsub(";", ","):sub(1, 50)
-				Send(string.format("N;%d;%s;%s;%s", id, tostring(q.level or ""), zone, title))
+				-- Queued: by the time it is our turn someone else may have
+				-- answered, and then ours is dropped.
+				Send(string.format("N;%d;%s;%s;%s", id, tostring(q.level or ""), zone, title), function()
+					if answered[id] then return false end
+					answered[id] = true
+					return true
+				end)
 			end)
 		end
 	end

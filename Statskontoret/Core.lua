@@ -119,6 +119,39 @@ function S.InPvPInstance()
 	return kind == "pvp" or kind == "arena"
 end
 
+-- A throttled sender for one prefix. The server allows a short burst of
+-- addon messages per prefix and then about one a second; the rest are
+-- dropped without a word. Messages wait in a queue and go out at that pace,
+-- in order. check, if given, is called just before sending: return false to
+-- drop a message that is no longer needed (say, someone else answered).
+-- Returns send(msg, channel, target, check); channel defaults to GUILD.
+local BURST = 8
+function S.Sender(prefix)
+	local queue, tokens, lastRefill, pumping = {}, BURST, 0, false
+	local function Pump()
+		local now = GetTime()
+		tokens = math.min(BURST, tokens + (now - lastRefill))
+		lastRefill = now
+		while tokens >= 1 and #queue > 0 do
+			local m = table.remove(queue, 1)
+			if not m.check or m.check() then
+				S.SendAddon(prefix, m.msg, m.channel, m.target)
+				tokens = tokens - 1
+			end
+		end
+		if #queue > 0 then C_Timer.After(1, Pump) else pumping = false end
+	end
+	return function(msg, channel, target, check)
+		channel = channel or "GUILD"
+		if channel == "GUILD" and not IsInGuild() then return end
+		table.insert(queue, { msg = msg, channel = channel, target = target, check = check })
+		if not pumping then
+			pumping = true
+			Pump()
+		end
+	end
+end
+
 function S.Invite(name)
 	if C_PartyInfo and C_PartyInfo.InviteUnit then
 		C_PartyInfo.InviteUnit(name)
