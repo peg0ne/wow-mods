@@ -8,6 +8,15 @@
 
 local hooked, lastError = false, nil
 
+-- /qls av turns the whole addon off (saved per account), for players whose
+-- own quest tracker (Questie) fights over the watch order. The hook on the
+-- quest log can't be removed, so it just does nothing while off. Saved
+-- variables arrive with our ADDON_LOADED; nothing sorts before that.
+local ready = false
+local function Enabled()
+	return ready and not (QuestLogSortDB and QuestLogSortDB.disabled)
+end
+
 -- Nothing is reordered in combat (dungeons are mostly combat). Re-watching
 -- quests rebuilds the tracker, which can't move its quest item buttons in
 -- combat, and writing to the map's quest rows from addon code then would
@@ -81,6 +90,7 @@ local function TryHook()
 	end
 	hooked = true
 	hooksecurefunc("QuestLogQuests_Update", function()
+		if not Enabled() then return end
 		if InCombat() then logPending = true return end
 		local ok, err = pcall(Reorder)
 		if not ok and err ~= lastError then
@@ -89,14 +99,31 @@ local function TryHook()
 		end
 	end)
 	-- The log may already be built; sort it now too.
-	if not InCombat() then pcall(Reorder) end
+	if Enabled() and not InCombat() then pcall(Reorder) end
+end
+
+local function IsLoaded(name)
+	if C_AddOns and C_AddOns.IsAddOnLoaded then return C_AddOns.IsAddOnLoaded(name) end
+	return IsAddOnLoaded and IsAddOnLoaded(name)
 end
 
 -- The quest log may be loaded after this addon; hook it once it exists.
 local events = CreateFrame("Frame")
 events:RegisterEvent("ADDON_LOADED")
 events:RegisterEvent("PLAYER_LOGIN")
-events:SetScript("OnEvent", TryHook)
+events:SetScript("OnEvent", function(_, event, name)
+	if event == "ADDON_LOADED" and name == "QuestLogSort" then
+		QuestLogSortDB = QuestLogSortDB or {}
+		ready = true
+	elseif event == "PLAYER_LOGIN" and Enabled() and not QuestLogSortDB.questieHint
+		and IsLoaded("Questie") then
+		-- Once per account: the toggle is easy to miss otherwise.
+		QuestLogSortDB.questieHint = true
+		print("|cff80c0ffQuestLogSort:|r Questie är på och har egen questtracker. "
+			.. "Om de bråkar om ordningen: /qls av stänger av QuestLogSort.")
+	end
+	TryHook()
+end)
 TryHook()
 
 -- Quest tracker on screen: it lists watched quests in watch-list order, so
@@ -180,6 +207,7 @@ local trackerAfterCombat = false
 
 local function SortTracker()
 	trackerPending = false
+	if not Enabled() then return end
 	if InCombat() then trackerAfterCombat = true return end
 	local ids = WatchedQuests()
 	if #ids < 2 then return end
@@ -247,6 +275,7 @@ trackerEvents:RegisterEvent("QUEST_REMOVED")
 trackerEvents:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 trackerEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
 trackerEvents:SetScript("OnEvent", function(_, event)
+	if not Enabled() then return end
 	if event == "PLAYER_REGEN_ENABLED" then
 		-- Combat is over: do what was held back.
 		if logPending then
@@ -261,3 +290,36 @@ trackerEvents:SetScript("OnEvent", function(_, event)
 	if InCombat() then trackerAfterCombat = true return end
 	QueueTrackerSort()
 end)
+
+local function Say(text)
+	print("|cff80c0ffQuestLogSort:|r " .. text)
+end
+
+SLASH_QUESTLOGSORT1 = "/qls"
+SLASH_QUESTLOGSORT2 = "/questlogsort"
+SlashCmdList.QUESTLOGSORT = function(msg)
+	if not ready then return end
+	msg = strtrim(msg or ""):lower()
+	local on
+	if msg == "av" or msg == "off" then
+		on = false
+	elseif msg == "på" or msg == "pa" or msg == "on" then
+		on = true
+	elseif msg == "" then
+		on = QuestLogSortDB.disabled -- no argument toggles
+	else
+		Say("/qls av stänger av all sortering (questloggen och trackern), /qls på slår på den igen. "
+			.. "Nu: " .. (Enabled() and "på" or "av") .. ".")
+		return
+	end
+	QuestLogSortDB.disabled = not on or nil
+	if on then
+		Say("på. Questloggen och trackern sorteras igen.")
+		if QuestScrollFrame and QuestScrollFrame:IsVisible() and not InCombat() then pcall(Reorder) end
+		if InCombat() then trackerAfterCombat = true else QueueTrackerSort() end
+	else
+		-- Blizzard's own order comes back the next time the log refreshes;
+		-- the tracker keeps its current order until something changes it.
+		Say("av. Inget sorteras längre (sparas för alla dina karaktärer). /qls på slår på igen.")
+	end
+end

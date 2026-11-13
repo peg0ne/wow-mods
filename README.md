@@ -11,7 +11,7 @@ Guild addons are named after Swedish public institutions and companies.
 | Skatteverket | Guild tax on looted gold, vendor and auction sales; standings in `/skatt` |
 | Swedbank | Guild loans; only the guild leader sees applications |
 | Gildepanel | A compact bar (`/gpanel`) that drops open on hover into a panel: your Skatteverket standing and tax, the favourites, who is online, your Swedbank loans. The Addons window (`/gpanel addons`) opens the other addons' windows and toggles their automatic settings and sets the max camera distance (`/gpanel kamera`); turns herb/mineral tracking back on after login (`/gpanel spårning`); warns an hour of play before your standing drops; celebrates with a gold flash, a banner, flying coins and a fanfare when you pay your tax (`/gpanel firande`, preview with `/gpanel firande test`) |
-| QuestLogSort | Puts completed quests last in the quest log and tracker; sorts the tracker by level. Waits until combat ends before reordering either |
+| QuestLogSort | Puts completed quests last in the quest log and tracker; sorts the tracker by level. Waits until combat ends before reordering either. `/qls av` turns it off entirely (for Questie users, whose tracker fights over the order) |
 | Statskontoret | Shared code the other addons depend on: the guild window (top-level, so windows stack cleanly), addon messages (throttled, so floods are not dropped), roster requests, invites, class colors. Shows nothing itself |
 | Postnord | Tells you in chat when a guildmate runs a newer release of this addon pack (`/postnord`). The release workflow stamps the tag into `Postnord.toc`; a copy run from the repo says `dev`, sends nothing and never warns |
 
