@@ -46,7 +46,7 @@ read_globals = {
 	"GetQuestLogSpecialItemInfo", "GetQuestLogTitle", "GetQuestMoneyToGet", "GetQuestReward",
 	"GetRealZoneText", "GetRealmName", "GetRepairAllCost", "GetSpellInfo", "GetSubZoneText",
 	"GetTime", "GetTotalAchievementPoints", "GetTrackingInfo", "GetZoneText", "GuildRoster",
-	"InviteUnit", "IsAddOnLoaded", "IsInGroup", "IsInGuild", "IsInInstance", "IsQuestCompletable",
+	"InviteUnit", "DisableAddOn", "IsAddOnLoaded", "IsInGroup", "IsInGuild", "IsInInstance", "IsQuestCompletable",
 	"IsQuestComplete", "IsShiftKeyDown", "ItemRefTooltip", "LE_PARTY_CATEGORY_HOME", "LOCALIZED_CLASS_NAMES_MALE", "Minimap",
 	"NUM_BAG_SLOTS", "PanelTemplates_DeselectTab", "PanelTemplates_SelectTab",
 	"PanelTemplates_TabResize", "PlaySound", "QUESTS_DISPLAYED", "QuestGetAutoAccept",

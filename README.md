@@ -149,7 +149,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 - Ideas for later: numbers in the NPC's quest list (gossip frame).
 
 ### Revisorsinspektionen (retired 2026-11-13, after v1.16.1)
-- Added Skatteverket's guild tax to Bokföring's profit and dimmed recipes under a 12% markup. Bokföring 0.6.4 now takes the tax off sales itself (`ns.Keep`), so it counted the tax twice; Skatteverket 0.32 also stopped taxing the AH deposit. Its group left Gildepanel's Addons window in 2.12.
+- Added Skatteverket's guild tax to Bokföring's profit and dimmed recipes under a 12% markup. Bokföring 0.6.4 now takes the tax off sales itself (`ns.Keep`), so it counted the tax twice; Skatteverket 0.32 also stopped taxing the AH deposit. Its group left Gildepanel's Addons window in 2.12. The pack still ships an empty 0.2 that writes over the old code (WowUp may leave a removed folder behind) and switches itself off with `C_AddOns.DisableAddOn`.
 
 ### Utmärkelser: homemade achievements (social)
 - This client has no achievements. Events trigger them: `PLAYER_LEVEL_UP`, looting an epic, profession reaching 300, `UPDATE_FACTION` (exalted), first mount, boss kills (`UNIT_DIED` in the combat log), a run without dying.

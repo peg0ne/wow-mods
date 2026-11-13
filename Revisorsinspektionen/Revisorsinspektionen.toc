@@ -1,0 +1,7 @@
+## Interface: 16001
+## Title: Revisorsinspektionen
+## Category: THÖNDERSTÖRM
+## IconTexture: Interface\Icons\INV_Misc_Book_11
+## Notes: Retired: Bokföring now counts Skatteverket's guild tax itself. This empty copy replaces the old one, switches itself off and can be deleted.
+## Version: 0.2
+Core.lua
