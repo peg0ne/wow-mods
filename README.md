@@ -64,7 +64,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Skolverket | 0.5 | Works in game: cooldowns and the item tooltip (reads Skatteverket's recipes) |
 | Eniro | 0.3 | Works in game: member list; position sharing needs a second member online to test |
 | Rattsmedicinalverket | 0.5 | Works in game (killer, level, ability, position from the Death Recap); 0.4 stops a second "unknown cause" record when `PLAYER_DEAD` fires again for the same death |
-| Polisen | 0.4 | Works in game; reports need a death to a hostile player. Battleground and arena deaths and sightings are ignored |
+| Polisen | 0.4 | Works in game; reports need a death to a hostile player. 0.4: battleground and arena deaths and sightings are ignored; catching up after login no longer misses incidents (asks from where it was last complete, pages through long gaps, server time). Full catch-up needs the answering member on 0.4 too |
 | Dodsannonser | 0.6 | Works in game (level-up notices since 0.4; hunter pet level-ups since 0.5, preview with `/dodsannons test husdjur`, off with `/dodsannons husdjur`) |
 | Handlaggaren | 0.3 | Works in game; 0.3 leaves repeatable quests alone (`/hl upprepade` to take them) and never picks a reward before every choice has loaded |
 | SCB | 0.4 | Works in game; saves the whole guild roster (rank, class, level, notes, last online) to `SCBDB.roster` |
