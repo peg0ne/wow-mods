@@ -1357,7 +1357,17 @@ end
 ------------------------------------------------------------------------
 -- A heads-up in chat an hour of play before the standing drops a step.
 
-local warned = {}
+-- Warnings already given, in GildepanelDB so a /reload doesn't repeat
+-- them. Keys hold when the debt started, so a new debt warns afresh; keys
+-- are dropped after two weeks.
+local function Warned()
+	db.warned = db.warned or {}
+	local now = time()
+	for key, at in pairs(db.warned) do
+		if type(at) ~= "number" or now - at > 14 * 86400 then db.warned[key] = nil end
+	end
+	return db.warned
+end
 local function CheckWarning()
 	if db.warn == false then return end
 	local c = SkatteverketCharDB
@@ -1368,10 +1378,11 @@ local function CheckWarning()
 	local good, negative = s.old and OLD_GOOD or GOOD, s.old and OLD_NEGATIVE or NEGATIVE
 	local ahead = s.old and 6 * 3600 or WARN_BEFORE
 	local start = s.old and c.debtSince or floor(((SkatteverketDB and SkatteverketDB.clock) or 0) - s.debt)
+	local warned = Warned()
 	for _, step in ipairs({ { good, "|cffffd100Neutral|r" }, { negative, "|cffff4040Negativ|r" } }) do
 		local left, key = step[1] - s.debt, floor(start / 60) .. ":" .. step[1]
 		if left > 0 and left <= ahead and not warned[key] then
-			warned[key] = true
+			warned[key] = time()
 			Print(format("din ställning blir %s om %s%s. Betala %s vid gildebanken för att behålla den.", step[2], Duration(left), s.old and "" or " speltid", Money(c.owed)))
 		end
 	end
