@@ -226,12 +226,16 @@ end
 
 function ns.PlatsLogin()
 	local saved = ns.char.listing
-	if saved and time() - (saved.posted or 0) < LIFETIME then
-		ns.myListing = { id = saved.id, tank = saved.tank, heal = saved.heal, dps = saved.dps, quest = saved.quest,
-			text = saved.text, posted = saved.posted, applicants = {} }
-		Broadcast()
-	else
-		ns.char.listing = nil
+	-- A listing posted in the seconds since login is newer than the saved
+	-- copy and may already have applicants, so it stays as it is.
+	if not ns.myListing then
+		if saved and time() - (saved.posted or 0) < LIFETIME then
+			ns.myListing = { id = saved.id, tank = saved.tank, heal = saved.heal, dps = saved.dps, quest = saved.quest,
+				text = saved.text, posted = saved.posted, applicants = {} }
+			Broadcast()
+		else
+			ns.char.listing = nil
+		end
 	end
 	C_Timer.NewTicker(30, function()
 		local now, changed = time(), false

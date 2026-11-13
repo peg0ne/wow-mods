@@ -119,6 +119,13 @@ function S.Invite(name)
 	end
 end
 
+-- An addon's ## Version from its .toc, or fallback if the client can't say.
+function S.AddonVersion(addon, fallback)
+	local meta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
+	local v = meta and meta(addon, "Version")
+	return v or fallback
+end
+
 ---------------------------------------------------------------------------
 -- Text.
 

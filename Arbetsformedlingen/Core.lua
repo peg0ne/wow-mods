@@ -25,10 +25,11 @@
 -- last seen under each zone are kept in ArbetsformedlingenCharDB and used
 -- while that zone stays collapsed.
 
-local _, ns = ...
+local addonName, ns = ...
 
 ns.GUILD = "THÖNDERSTÖRM"
-ns.VERSION = "0.3"
+-- From the .toc, so a release raises it and older copies hear about it.
+ns.VERSION = Statskontoret.AddonVersion(addonName, "0.3")
 ns.PREFIX = "UPPDRAG"
 local CHUNK = 200
 

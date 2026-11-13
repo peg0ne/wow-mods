@@ -87,23 +87,34 @@ local function Repair()
 	return cost
 end
 
+local visit = 0   -- counts vendor openings, so a late timer from an earlier one does nothing
+local MONEY_DELAY = 1  -- seconds for the server to pay for the last sales before repairing
+
 local function Finish()
 	if ticker then ticker:Cancel() ticker = nil end
-	if not VendorOpen() then
-		if sold and sold.items > 0 then
-			Print(string.format("handlaren stängdes; sålde %d saker för %s.", sold.items, Money(sold.value)))
-		end
-		queue, sold = nil, nil
-		return
-	end
-	local repaired = Repair()
-	local parts = {}
-	if sold and sold.items > 0 then
-		table.insert(parts, string.format("sålde %d saker för %s", sold.items, Money(sold.value)))
-	end
-	if repaired > 0 then table.insert(parts, "lagade utrustningen för " .. Money(repaired)) end
-	if #parts > 0 then Print(table.concat(parts, ", ") .. ".") end
+	local result = sold
 	queue, sold = nil, nil
+	local function Report(repairNow)
+		local parts = {}
+		if result and result.items > 0 then
+			table.insert(parts, string.format("sålde %d saker för %s", result.items, Money(result.value)))
+		end
+		if not repairNow then
+			if #parts > 0 then Print("handlaren stängdes; " .. table.concat(parts, ", ") .. ".") end
+			return
+		end
+		local repaired = Repair()
+		if repaired > 0 then table.insert(parts, "lagade utrustningen för " .. Money(repaired)) end
+		if #parts > 0 then Print(table.concat(parts, ", ") .. ".") end
+	end
+	if not VendorOpen() then Report(false) return end
+	if not (result and result.items > 0) then Report(true) return end
+	-- The money for what was just sold arrives a moment later; repair after
+	-- it, so the junk helps pay as promised.
+	local thisVisit = visit
+	C_Timer.After(MONEY_DELAY, function()
+		Report(thisVisit == visit and VendorOpen())
+	end)
 end
 
 local function Tick()
@@ -124,8 +135,6 @@ local function Tick()
 		end
 	end
 end
-
-local visit = 0   -- counts vendor openings, so a late timer from an earlier one does nothing
 
 local function OnMerchantShow()
 	visit = visit + 1

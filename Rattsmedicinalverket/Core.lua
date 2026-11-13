@@ -174,8 +174,10 @@ local function Kind(e)
 end
 
 -- Hostile from the flags; without flags, any other player in the recap
--- (duels end before death, and group members do not hit you).
+-- (duels end before death, and group members do not hit you). Never
+-- yourself: self-inflicted damage must not file a report against you.
 local function Hostile(e)
+	if e.guid and e.guid == UnitGUID("player") then return false end
 	if e.flags then return band(e.flags, HOSTILE) > 0 end
 	return Kind(e) == "player" or Kind(e) == "npc"
 end
@@ -355,6 +357,10 @@ events:SetScript("OnEvent", function(_, event, ...)
 		dead = UnitIsDeadOrGhost("player") and true or nil
 		local register = C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix or RegisterAddonMessagePrefix
 		if register then register(ns.PREFIX) end
+		-- Me() needs the roster to know our full two-word name; without it a
+		-- death would be filed under the first name only, and get a different
+		-- id from the one other members build from our full name.
+		Statskontoret.RequestRoster()
 	elseif event == "PLAYER_DEAD" then
 		OnDeath()
 	elseif event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST" then

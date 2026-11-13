@@ -11,10 +11,11 @@
 --   P;version;mapID;x;y        my position, x and y in 0-10000 on that map
 --   X                          I stopped sharing (or entered an instance)
 
-local _, ns = ...
+local addonName, ns = ...
 
 ns.GUILD = "THÖNDERSTÖRM"
-ns.VERSION = "0.1"
+-- From the .toc, so a release raises it and older copies hear about it.
+ns.VERSION = Statskontoret.AddonVersion(addonName, "0.1")
 ns.PREFIX = "ENIRO"
 local MOVE_EVERY, IDLE_EVERY, EXPIRE = 10, 60, 90
 

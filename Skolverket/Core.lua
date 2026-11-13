@@ -327,7 +327,10 @@ local function OnRoster()
 		end
 	end
 	ns.online = online
-	if GetGuildRosterShowOffline and GetGuildRosterShowOffline() then
+	-- Only prune against our own guild's roster: SkolverketDB is shared by
+	-- the account, and an alt in another guild would otherwise drop every
+	-- THÖNDERSTÖRM member's cooldowns.
+	if ns.InOurGuild() and GetGuildRosterShowOffline and GetGuildRosterShowOffline() then
 		inGuild = all
 		for name in pairs(db.cds) do
 			if not all[name] then db.cds[name] = nil end
