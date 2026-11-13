@@ -70,6 +70,9 @@ local function Broadcast()
 	if not l or not ns.InOurGuild() then return end
 	ns.Send(string.format("J;%s;%d;%d;%d;%d;%d;%d;%s", ns.VERSION, l.id, l.tank, l.heal, l.dps,
 		l.quest or 0, UnitLevel("player") or 0, l.text))
+	-- How long it has been up, so others show the right age. Separate from
+	-- J, whose text runs to the end; clients before 0.7 ignore it.
+	ns.Send(string.format("A;%d;%d", l.id, math.max(0, time() - l.posted)))
 	l.lastSent = time()
 end
 
@@ -169,6 +172,13 @@ function ns.OnPlatsGuild(sender, parts)
 				sender, ns.NeedsText(l), text, mine))
 		end
 		ns.Changed()
+	elseif parts[1] == "A" then
+		local l = ns.listings[sender]
+		local age = tonumber(parts[3])
+		if l and tostring(l.id) == parts[2] and age then
+			l.posted = time() - age
+			ns.Changed()
+		end
 	elseif parts[1] == "X" then
 		local l = ns.listings[sender]
 		if l and tostring(l.id) == parts[2] then

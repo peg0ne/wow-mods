@@ -12,6 +12,7 @@
 --   W;id,id,...                           what are these quests called?
 --   N;id;level;zone;title                 answer from one member who has it
 --   J;version;id;tank;heal;dps;quest;level;text   Platsbanken: my listing
+--   A;id;age                              Platsbanken: my listing has been up age s (0.7)
 --   X;id                                  Platsbanken: my listing is gone
 -- Whispers (Platsbanken, see Platsbanken.lua):
 --   S;id;role   apply      I;id   invited      Z;id   application removed
@@ -366,7 +367,7 @@ local function OnAddonMessage(prefix, msg, channel, sender)
 				if ns.OnPlatsAsked then ns.OnPlatsAsked() end
 			end)
 		end
-	elseif parts[1] == "J" or parts[1] == "X" then
+	elseif parts[1] == "J" or parts[1] == "A" or parts[1] == "X" then
 		if ns.OnPlatsGuild then ns.OnPlatsGuild(sender, parts) end
 	elseif parts[1] == "L" then
 		OnList(sender, parts)
