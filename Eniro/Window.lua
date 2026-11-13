@@ -101,50 +101,6 @@ local function Panel(name, titleText)
 	return f, false
 end
 
--- A tab under the window, as on the Character window; the first at the
--- left edge, the rest after it.
-local function Tab(f, i, label, onClick)
-	local name = f:GetName() .. "Tab" .. i
-	local b
-	for _, template in ipairs({ "CharacterFrameTabButtonTemplate", "PanelTabButtonTemplate" }) do
-		if HasTemplate(template) then
-			local ok, t = pcall(CreateFrame, "Button", name, f, template)
-			if ok and t then
-				b = t
-				b.isTab = true
-				break
-			end
-		end
-	end
-	if not b then
-		b = CreateFrame("Button", name, f, "UIPanelButtonTemplate")
-		b:SetSize(120, 22)
-	end
-	b:SetID(i)
-	b:SetText(label)
-	if b.isTab and PanelTemplates_TabResize then pcall(PanelTemplates_TabResize, b, 0) end
-	b:SetScript("OnClick", function()
-		onClick()
-		if PlaySound and SOUNDKIT then PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB) end
-	end)
-	if i == 1 then
-		b:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 12, 2)
-	else
-		b:SetPoint("LEFT", _G[f:GetName() .. "Tab" .. (i - 1)], "RIGHT", b.isTab and -15 or 4, 0)
-	end
-	return b
-end
-
-local function SelectTab(tab, on)
-	if tab.isTab and PanelTemplates_SelectTab and PanelTemplates_DeselectTab then
-		if on then PanelTemplates_SelectTab(tab) else PanelTemplates_DeselectTab(tab) end
-	elseif on then
-		tab:Disable()
-	else
-		tab:Enable()
-	end
-end
-
 local function Build()
 	local classic
 	frame, classic = Panel("EniroFrame", "Eniro")

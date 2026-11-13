@@ -30,6 +30,11 @@ which zips every addon except ApiProbe into a GitHub release on https://github.c
 Guild members install it once in WowUp-CF (Get Addons → Install from URL → the repo link) and get updates from then on.
 Don't install them through WowUp on the dev machine: it would replace the junctions from `link.ps1`.
 
+Checks: every push runs `.github/workflows/lint.yml`, which compiles each Lua file under 5.1 and runs
+[luacheck](https://github.com/lunarmodules/luacheck) with `.luacheckrc`. Run `luacheck .` locally before pushing.
+A new game API or SavedVariables name has to be added to `.luacheckrc` (read_globals or globals); that is
+what lets the check catch typos and calls to functions this client doesn't have.
+
 Conventions (matching the existing addons):
 - Folder and SavedVariables names are ASCII (`Atervinningscentralen`); `## Title` keeps the Swedish spelling.
 - Chat output is in Swedish, starting with a colored addon name and a lowercase sentence.

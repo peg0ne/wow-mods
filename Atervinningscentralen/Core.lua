@@ -8,8 +8,6 @@
 -- Skatteverket counts gold gained while a vendor is open as income, so the
 -- gray sales are taxed exactly like selling by hand. Repairs are not income.
 
-local _, ns = ...
-
 local BATCH = 6          -- items sold per tick
 local INTERVAL = 0.2     -- seconds between ticks
 

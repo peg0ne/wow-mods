@@ -1247,13 +1247,13 @@ local function BuildShow()
 		local p = math.min(t / 0.7, 1)
 		local ease = p >= 1 and 1 or 1 + 2 ^ (-10 * p) * math.sin((p * 10 - 0.75) * 2 * math.pi / 3)
 		local scale = math.max(0.05, 2.4 - 1.4 * ease)
-		local b = self.banner
-		b:SetScale(scale)
-		b:ClearAllPoints()
-		b:SetPoint("CENTER", UIParent, "CENTER", 0, 170 / scale)
-		b:SetAlpha(math.min(t / 0.15, 1) * fade)
-		if b.star.SetRotation then b.star:SetRotation(t * 1.3) end
-		b.star:SetAlpha(0.6 + 0.4 * math.sin(t * 4))
+		local banner = self.banner
+		banner:SetScale(scale)
+		banner:ClearAllPoints()
+		banner:SetPoint("CENTER", UIParent, "CENTER", 0, 170 / scale)
+		banner:SetAlpha(math.min(t / 0.15, 1) * fade)
+		if banner.star.SetRotation then banner.star:SetRotation(t * 1.3) end
+		banner.star:SetAlpha(0.6 + 0.4 * math.sin(t * 4))
 		-- The coins: thrown out and pulled down, spinning.
 		local alive = false
 		for _, c in ipairs(self.coins) do

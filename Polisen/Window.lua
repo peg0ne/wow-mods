@@ -158,7 +158,7 @@ local function Build()
 	frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
 	tinsert(UISpecialFrames, "PolisenFrame")
 	-- Below the portrait and title bar; buttons in the strip under the inset.
-	local dy, bottom, left = classic and -12 or 0, classic and 4 or 18, classic and 66 or 24
+	local dy, left = classic and -12 or 0, classic and 66 or 24
 
 	frame.heading = Text(frame, "GameFontNormal", "TOPLEFT", left, -34)
 
