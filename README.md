@@ -8,16 +8,17 @@ Guild addons are named after Swedish public institutions and companies.
 | Addon | What it does |
 |---|---|
 | Arbetsformedlingen | Shared quests (`/uppdrag`) and the Platsbanken group-finder board (`/platsbanken`) |
-| Skatteverket | Guild tax on looted gold, vendor and auction sales; standings in `/skatt` |
-| Swedbank | Guild loans; only the guild leader sees applications |
+| Skatteverket | Guild tax on looted gold, vendor and auction sales; standings in `/skatt`. 0.34 also has work orders (Arbetsorder), elections (Folkvald representant), Socialbidrag and tickets (Kontakta oss!), and a public `SkatteverketAPI` (`Standing`, `MemberStanding`, `TaxRate`, `Locked`, `Toggle(page)`) that our addons use before their own math. Since 0.32 the deposit back from an AH sale is not taxed |
+| Swedbank | Guild loans; only the guild leader sees applications. Since 0.11 interest is charged per week begun (from the day after the gold is sent), and the leader can offer a loan for the member to answer |
+| Bokforing | Crafting profit window. Since 0.6.4 a sale's value is after the AH's 5% cut and the guild tax (`ns.Keep`) |
 | Gildepanel | A compact bar (`/gpanel`) that drops open on hover into a panel: your Skatteverket standing (from `SkatteverketAPI` when it has one) and tax, the favourites, who is online, your Swedbank loans. The Addons window (`/gpanel addons`) opens the other addons' windows (and Skatteverket's Arbetsorder, Folkvald, Socialbidrag and Kontakta oss pages through `SkatteverketAPI.Toggle`) and toggles their automatic settings and sets the max camera distance (`/gpanel kamera`); turns herb/mineral tracking back on after login (`/gpanel spårning`); warns an hour of play before your standing drops; celebrates with a gold flash, a banner, flying coins and a fanfare when you pay your tax (`/gpanel firande`, preview with `/gpanel firande test`) |
-| QuestLogSort | Puts completed quests last in the quest log and tracker; sorts the tracker by level. Waits until combat ends before reordering either. `/qls zon` sorts the tracker zone by zone instead (completed last in each zone, by level), the zone you are in first, each zone's name and a line above its first quest (the gap is only added out of combat). Clicking a zone folds it: its quests are unwatched and it stays as '+ Zone (3)' until clicked again, per character (`/qls öppna` unfolds all); `/qls av` turns it off entirely (for Questie users, whose tracker fights over the order) |
+| QuestLogSort | Puts completed quests last in the quest log (per zone) and the tracker. Waits until combat ends before reordering either. The tracker has two orders: by level (`/qls nivå`, the default) or zone by zone (`/qls zon`): the zone you are in first, then the quest log's order, by level within a zone with completed last, and each zone's name with a line above its first quest. Clicking a zone's name folds it (its quests are unwatched, the zone stays as "+ Zone (3)"; per character) and clicking again unfolds it; `/qls öppna` unfolds all. `/qls av` turns the whole addon off, for Questie users whose tracker fights over the order (they get a one-time hint at login). Both switches are also in Gildepanel's Addons window |
 | Statskontoret | Shared code the other addons depend on: the guild window (top-level, so windows stack cleanly), addon messages (throttled, so floods are not dropped), roster requests, invites, class colors. Shows nothing itself |
 | Postnord | Tells you in chat when a guildmate runs a newer release of this addon pack (`/postnord`). The release workflow stamps the tag into `Postnord.toc`; a copy run from the repo says `dev`, sends nothing and never warns |
 
 Guild addons share data through `C_ChatInfo.SendAddonMessage` on the GUILD channel and store it in SavedVariables.
 Arbetsformedlingen, Gildepanel and QuestLogSort are the user's own and live in this repo (moved here unchanged on 2026-11-07).
-Skatteverket and Swedbank belong to someone else: they stay in the AddOns folder, and this repo only reads their behavior (for example, Skatteverket taxes vendor sales).
+Skatteverket, Swedbank and Bokforing belong to someone else: they stay in the AddOns folder, and this repo only reads their behavior and saved data (for example, Skatteverket taxes vendor sales). Prefer `SkatteverketAPI` where it has the answer; keep our own math only as a fallback (the API gives no debt age, so Gildepanel's countdowns stay ours).
 
 ## This repo
 
@@ -45,6 +46,8 @@ Conventions (matching the existing addons):
 - Chat output is in Swedish, starting with a colored addon name and a lowercase sentence.
 - TOC `## Notes` are in English.
 - Once released, never rename the folder or SavedVariables names, or saved data is lost.
+- To retire an addon, don't delete its folder: WowUp may leave the old copy behind and members won't delete it. Ship an empty `Core.lua` that calls `C_AddOns.DisableAddOn` under the same name instead (see Revisorsinspektionen 0.2), and remove its group from Gildepanel's Addons window and its names from `.luacheckrc`.
+- A setting a member can switch belongs in Gildepanel's Addons window (`SETTINGS` in `Gildepanel.lua`) as well as its slash command. An item with `slash = { key, toggle }` runs the command; `slash = { key, on, off }` runs one of two (QuestLogSort's "zon"/"nivå").
 
 ## The Forever client (learned with ApiProbe, 2026-11-07)
 
@@ -70,6 +73,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | SCB | 0.4 | Works in game; saves the whole guild roster (rank, class, level, notes, last online) to `SCBDB.roster` |
 | Kolapp | 0.4 | Works in game: quest tracker numbers and the quest on item tooltips; 0.4 only changes the tracker's shown text, which stops the "blocked action" errors in combat |
 | Statskontoret | 0.1 | New: shared library; not yet tested in game |
+| Revisorsinspektionen | 0.2 | Retired in v1.17.0; 0.2 is an empty copy that switches itself off |
 
 ## Accepted ideas
 
@@ -183,6 +187,8 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 **Interface:** square minimap with a button drawer, unit frames (class colors, real health numbers, draggable), tooltips (cursor anchor, guild rank, "taught by guildmate").
 
 **Automation:** vendor restocking (reagents, ammo, food, water), gear sets, auto-greed and mail helpers, auto-accepting guild invites and declining duels, double-click fishing.
+
+**Dropped:** Riksdagen (guild votes): Skatteverket's Folkvald representant already holds elections.
 
 **Other non-guild ideas:** vendor prices in tooltips, map coordinates, quest XP in the quest log, XP/hour tracker, gold/hour tracker, death recap, rare spawn alert, swing timer, enemy cast bars, reagent and ammo counter.
 
