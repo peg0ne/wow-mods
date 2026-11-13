@@ -56,15 +56,15 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Addon | Version | Status |
 |---|---|---|
 | Atervinningscentralen | 0.1 | Works in game (sells grays, repairs) |
-| Skolverket | 0.3 | Cut down to cooldowns and the item tooltip (reads Skatteverket's recipes); not yet tested in game |
-| Eniro | 0.1 | Works in game (member list); position sharing not yet tested (needs a second member) |
+| Skolverket | 0.4 | Works in game: cooldowns and the item tooltip (reads Skatteverket's recipes) |
+| Eniro | 0.2 | Works in game: member list; position sharing needs a second member online to test |
 | Rattsmedicinalverket | 0.4 | Works in game (killer, level, ability, position from the Death Recap); 0.4 stops a second "unknown cause" record when `PLAYER_DEAD` fires again for the same death |
-| Polisen | 0.1 | Loads without errors; reports need a death to a hostile player |
-| Dodsannonser | 0.5 | Built, not yet tested in game (level-up notices added in 0.4; hunter pet level-ups in 0.5, preview with `/dodsannons test husdjur`, off with `/dodsannons husdjur`) |
-| Handlaggaren | 0.2 | Built, not yet tested in game |
-| SCB | 0.3 | Roster export works in game; the rest is not yet tested. 0.3 saves the whole guild roster (rank, class, level, notes, last online) to `SCBDB.roster` |
-| Kolapp | 0.3 | Works in game (quest tracker numbers); 0.3 adds the quest on item tooltips, not yet tested in game |
-| Revisorsinspektionen | 0.1 | Built, not yet tested in game |
+| Polisen | 0.3 | Works in game; reports need a death to a hostile player |
+| Dodsannonser | 0.5 | Works in game (level-up notices since 0.4; hunter pet level-ups since 0.5, preview with `/dodsannons test husdjur`, off with `/dodsannons husdjur`) |
+| Handlaggaren | 0.2 | Works in game |
+| SCB | 0.3 | Works in game; saves the whole guild roster (rank, class, level, notes, last online) to `SCBDB.roster` |
+| Kolapp | 0.3 | Works in game: quest tracker numbers and the quest on item tooltips |
+| Revisorsinspektionen | 0.1 | Works in game |
 
 ## Accepted ideas
 
