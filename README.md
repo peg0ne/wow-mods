@@ -12,6 +12,7 @@ Guild addons are named after Swedish public institutions and companies.
 | Swedbank | Guild loans; only the guild leader sees applications |
 | Gildepanel | A compact bar (`/gpanel`) that drops open on hover into a panel: your Skatteverket standing and tax, the favourites, who is online, your Swedbank loans. The Addons window (`/gpanel addons`) opens the other addons' windows and toggles their automatic settings and sets the max camera distance (`/gpanel kamera`); turns herb/mineral tracking back on after login (`/gpanel spårning`); warns an hour of play before your standing drops; celebrates with a gold flash, a banner, flying coins and a fanfare when you pay your tax (`/gpanel firande`, preview with `/gpanel firande test`) |
 | QuestLogSort | Puts completed quests last in the quest log and tracker; sorts the tracker by level |
+| Statskontoret | Shared code the other addons depend on: the guild window (top-level, so windows stack cleanly), addon messages, roster requests, invites, class colors. Shows nothing itself |
 | Postnord | Tells you in chat when a guildmate runs a newer release of this addon pack (`/postnord`). The release workflow stamps the tag into `Postnord.toc`; a copy run from the repo says `dev`, sends nothing and never warns |
 
 Guild addons share data through `C_ChatInfo.SendAddonMessage` on the GUILD channel and store it in SavedVariables.
@@ -35,6 +36,10 @@ Checks: every push runs `.github/workflows/lint.yml`, which compiles each Lua fi
 A new game API or SavedVariables name has to be added to `.luacheckrc` (read_globals or globals); that is
 what lets the check catch typos and calls to functions this client doesn't have.
 
+Shared code lives in `Statskontoret` (global `Statskontoret`). An addon that uses it lists it in its `.toc`
+(`## Dependencies: Statskontoret`) so the game loads it first. Put code there when a second addon needs it,
+keep it backwards compatible (add functions, don't change existing ones) and raise `Statskontoret.API` when adding.
+
 Conventions (matching the existing addons):
 - Folder and SavedVariables names are ASCII (`Atervinningscentralen`); `## Title` keeps the Swedish spelling.
 - Chat output is in Swedish, starting with a colored addon name and a lowercase sentence.
@@ -56,15 +61,16 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Addon | Version | Status |
 |---|---|---|
 | Atervinningscentralen | 0.1 | Works in game (sells grays, repairs) |
-| Skolverket | 0.4 | Works in game: cooldowns and the item tooltip (reads Skatteverket's recipes) |
-| Eniro | 0.2 | Works in game: member list; position sharing needs a second member online to test |
-| Rattsmedicinalverket | 0.4 | Works in game (killer, level, ability, position from the Death Recap); 0.4 stops a second "unknown cause" record when `PLAYER_DEAD` fires again for the same death |
-| Polisen | 0.3 | Works in game; reports need a death to a hostile player |
-| Dodsannonser | 0.5 | Works in game (level-up notices since 0.4; hunter pet level-ups since 0.5, preview with `/dodsannons test husdjur`, off with `/dodsannons husdjur`) |
+| Skolverket | 0.5 | Works in game: cooldowns and the item tooltip (reads Skatteverket's recipes) |
+| Eniro | 0.3 | Works in game: member list; position sharing needs a second member online to test |
+| Rattsmedicinalverket | 0.5 | Works in game (killer, level, ability, position from the Death Recap); 0.4 stops a second "unknown cause" record when `PLAYER_DEAD` fires again for the same death |
+| Polisen | 0.4 | Works in game; reports need a death to a hostile player |
+| Dodsannonser | 0.6 | Works in game (level-up notices since 0.4; hunter pet level-ups since 0.5, preview with `/dodsannons test husdjur`, off with `/dodsannons husdjur`) |
 | Handlaggaren | 0.2 | Works in game |
-| SCB | 0.3 | Works in game; saves the whole guild roster (rank, class, level, notes, last online) to `SCBDB.roster` |
+| SCB | 0.4 | Works in game; saves the whole guild roster (rank, class, level, notes, last online) to `SCBDB.roster` |
 | Kolapp | 0.3 | Works in game: quest tracker numbers and the quest on item tooltips |
 | Revisorsinspektionen | 0.1 | Works in game |
+| Statskontoret | 0.1 | New: shared library; not yet tested in game |
 
 ## Accepted ideas
 

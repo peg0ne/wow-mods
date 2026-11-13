@@ -53,13 +53,7 @@ function ns.InOurGuild()
 	return GetGuildInfo("player") == ns.GUILD
 end
 
-local function RequestRoster()
-	if C_GuildInfo and C_GuildInfo.GuildRoster then
-		C_GuildInfo.GuildRoster()
-	elseif GuildRoster then
-		GuildRoster()
-	end
-end
+local RequestRoster = Statskontoret.RequestRoster
 ns.RequestRoster = RequestRoster
 
 -- This character's full name as the guild sees it. Forever names have two
@@ -94,21 +88,13 @@ end
 
 local function Send(msg)
 	if not IsInGuild() then return end
-	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-		C_ChatInfo.SendAddonMessage(ns.PREFIX, msg, "GUILD")
-	elseif SendAddonMessage then
-		SendAddonMessage(ns.PREFIX, msg, "GUILD")
-	end
+	Statskontoret.SendAddon(ns.PREFIX, msg, "GUILD")
 end
 ns.Send = Send
 
 -- An addon whisper to one member.
 function ns.SendTo(target, msg)
-	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-		C_ChatInfo.SendAddonMessage(ns.PREFIX, msg, "WHISPER", target)
-	elseif SendAddonMessage then
-		SendAddonMessage(ns.PREFIX, msg, "WHISPER", target)
-	end
+	Statskontoret.SendAddon(ns.PREFIX, msg, "WHISPER", target)
 end
 
 local function Changed()

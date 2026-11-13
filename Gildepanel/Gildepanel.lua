@@ -695,7 +695,7 @@ local function OpenPanel()
 	frame:Show()
 	-- Older versions kept another corner; switch to the top-left one.
 	if db.pos and db.pos[1] ~= "TOPLEFT" then SavePosition() end
-	if C_GuildInfo and C_GuildInfo.GuildRoster then C_GuildInfo.GuildRoster() elseif GuildRoster then GuildRoster() end
+	Statskontoret.RequestRoster()
 	guildDirty, cache.at = true, 0
 	Refresh()
 end
@@ -943,50 +943,7 @@ local function RefreshHub()
 	end
 end
 
--- The look of Skatteverket's panel: the game's portrait window (like the
--- Character window) with the guild's lightning bolt from Skatteverket's
--- art and the title on the title bar. Falls back to the old dialog look on
--- a client without the template, as Skatteverket does.
-local function HasTemplate(name)
-	if C_XMLUtil and C_XMLUtil.GetTemplateInfo then return C_XMLUtil.GetTemplateInfo(name) ~= nil end
-	return true
-end
-
-local function Panel(name, titleText)
-	local ok, f = false, nil
-	if HasTemplate("ButtonFrameTemplate") then ok, f = pcall(CreateFrame, "Frame", name, UIParent, "ButtonFrameTemplate") end
-	if ok and f then
-		local art = Loaded("Skatteverket") and "Interface\\AddOns\\Skatteverket\\Media\\Bolt" or "Interface\\Icons\\Spell_Nature_Lightning"
-		local portrait = f.portrait or f.Portrait or (f.PortraitContainer and f.PortraitContainer.portrait)
-			or _G[name .. "Portrait"]
-		if f.SetPortraitToAsset then
-			f:SetPortraitToAsset(art)
-		elseif portrait then
-			portrait:SetTexture(art)
-		end
-		if portrait then portrait:Show() end
-		local title = f.TitleText or (f.TitleContainer and f.TitleContainer.TitleText)
-		if title then title:SetText(titleText) end
-		return f, true
-	end
-	f = CreateFrame("Frame", name, UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-	f:SetBackdrop({
-		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-		tile = true, tileSize = 32, edgeSize = 32,
-		insets = { left = 11, right = 12, top = 12, bottom = 11 },
-	})
-	local header = f:CreateTexture(nil, "ARTWORK")
-	header:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header")
-	header:SetSize(320, 64)
-	header:SetPoint("TOP", 0, 12)
-	local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	title:SetPoint("TOP", header, "TOP", 0, -14)
-	title:SetText(titleText)
-	local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", -6, -6)
-	return f, false
-end
+local Panel = Statskontoret.Panel
 
 local function BuildHub()
 	-- Wide, with the settings in two columns (2.8): one column grew too tall.

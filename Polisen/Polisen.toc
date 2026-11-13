@@ -3,8 +3,8 @@
 ## Category: THÖNDERSTÖRM
 ## IconTexture: Interface\Icons\Ability_Hunter_SniperShot
 ## Notes: PvP incident log for THÖNDERSTÖRM: hostile players who kill guild members are reported, you get a warning when one shows up, the guild hears who spotted whom, and their tooltip shows the record. /polisen lists the wanted and recent incidents. Needs Rättsmedicinalverket.
-## Version: 0.3
-## Dependencies: Rattsmedicinalverket
+## Version: 0.4
+## Dependencies: Rattsmedicinalverket, Statskontoret
 ## SavedVariables: PolisenDB
 Core.lua
 Window.lua

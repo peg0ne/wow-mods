@@ -126,8 +126,7 @@ function ns.Invite(name)
 	local l = ns.myListing
 	local a = l and l.applicants[name]
 	if not a then return end
-	if C_PartyInfo and C_PartyInfo.InviteUnit then C_PartyInfo.InviteUnit(name)
-	elseif InviteUnit then InviteUnit(name) end
+	Statskontoret.Invite(name)
 	ns.SendTo(name, "I;" .. l.id)
 	if not a.invited then
 		a.invited = true

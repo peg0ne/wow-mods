@@ -76,11 +76,7 @@ end
 
 local function Send(msg)
 	if not IsInGuild() then return end
-	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-		C_ChatInfo.SendAddonMessage(ns.PREFIX, msg, "GUILD")
-	elseif SendAddonMessage then
-		SendAddonMessage(ns.PREFIX, msg, "GUILD")
-	end
+	Statskontoret.SendAddon(ns.PREFIX, msg, "GUILD")
 end
 
 local function Changed()
@@ -353,7 +349,7 @@ events:SetScript("OnEvent", function(_, event, ...)
 		lastMoney = GetMoney()
 		local register = C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix or RegisterAddonMessagePrefix
 		if register then register(ns.PREFIX) end
-		if C_GuildInfo and C_GuildInfo.GuildRoster then C_GuildInfo.GuildRoster() end
+		Statskontoret.RequestRoster()
 		C_Timer.After(20, function()
 			SendFigures(true)
 			ns.Ask()

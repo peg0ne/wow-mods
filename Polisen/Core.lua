@@ -84,11 +84,7 @@ local function Pump()
 	lastRefill = now
 	while tokens >= 1 and #outbox > 0 do
 		local msg = table.remove(outbox, 1)
-		if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-			C_ChatInfo.SendAddonMessage(ns.PREFIX, msg, "GUILD")
-		elseif SendAddonMessage then
-			SendAddonMessage(ns.PREFIX, msg, "GUILD")
-		end
+		Statskontoret.SendAddon(ns.PREFIX, msg, "GUILD")
 		tokens = tokens - 1
 	end
 	if #outbox > 0 then C_Timer.After(1, Pump) else pumping = false end
@@ -107,9 +103,7 @@ end
 -- Incidents and suspects.
 
 function ns.ClassText(classFile, text)
-	local color = classFile and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classFile]
-	if not color then return text end
-	return string.format("|cff%02x%02x%02x%s|r", color.r * 255, color.g * 255, color.b * 255, text)
+	return Statskontoret.ClassText(classFile, text)
 end
 
 function ns.ClassName(classFile)

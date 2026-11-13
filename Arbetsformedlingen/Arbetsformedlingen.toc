@@ -3,7 +3,8 @@
 ## Category: THÖNDERSTÖRM
 ## IconTexture: Interface\Icons\INV_Scroll_03
 ## Notes: Shared quests for THÖNDERSTÖRM: /uppdrag shows which of your quests other online guild members also have, what quests they have that you do not, and who has a quest in your quest log tooltip; Platsbanken (/platsbanken) is a guild board for finding group members.
-## Version: 0.6
+## Version: 0.7
+## Dependencies: Statskontoret
 ## SavedVariablesPerCharacter: ArbetsformedlingenCharDB
 Core.lua
 Platsbanken.lua

@@ -53,52 +53,7 @@ local function SetMode(newMode)
 	ns.RefreshWindow()
 end
 
--- The look of Skatteverket's panel: the game's portrait window (like the
--- Character window) with the guild's lightning bolt from Skatteverket's
--- art, the title on the title bar, a recessed inset and tabs along the
--- bottom edge. Falls back to the old dialog look on a client without the
--- template, as Skatteverket does.
-local function HasTemplate(name)
-	if C_XMLUtil and C_XMLUtil.GetTemplateInfo then return C_XMLUtil.GetTemplateInfo(name) ~= nil end
-	return true
-end
-
-local function Panel(name, titleText)
-	local ok, f = false, nil
-	if HasTemplate("ButtonFrameTemplate") then ok, f = pcall(CreateFrame, "Frame", name, UIParent, "ButtonFrameTemplate") end
-	if ok and f then
-		local bolt = C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("Skatteverket")
-		local art = bolt and "Interface\\AddOns\\Skatteverket\\Media\\Bolt" or "Interface\\Icons\\Spell_Nature_Lightning"
-		local portrait = f.portrait or f.Portrait or (f.PortraitContainer and f.PortraitContainer.portrait)
-			or _G[name .. "Portrait"]
-		if f.SetPortraitToAsset then
-			f:SetPortraitToAsset(art)
-		elseif portrait then
-			portrait:SetTexture(art)
-		end
-		if portrait then portrait:Show() end
-		local title = f.TitleText or (f.TitleContainer and f.TitleContainer.TitleText)
-		if title then title:SetText(titleText) end
-		return f, true
-	end
-	f = CreateFrame("Frame", name, UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-	f:SetBackdrop({
-		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-		tile = true, tileSize = 32, edgeSize = 32,
-		insets = { left = 11, right = 12, top = 12, bottom = 11 },
-	})
-	local header = f:CreateTexture(nil, "ARTWORK")
-	header:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header")
-	header:SetSize(320, 64)
-	header:SetPoint("TOP", 0, 12)
-	local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	title:SetPoint("TOP", header, "TOP", 0, -14)
-	title:SetText(titleText)
-	local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", -6, -6)
-	return f, false
-end
+local HasTemplate = Statskontoret.HasTemplate
 
 -- A tab under the window, as on the Character window; the first at the
 -- left edge, the rest after it.
@@ -146,17 +101,7 @@ end
 
 local function Build()
 	local classic
-	frame, classic = Panel("PolisenFrame", "Polisen")
-	frame:SetSize(WIDTH, 480)
-	frame:SetPoint("CENTER")
-	frame:SetFrameStrata("DIALOG")
-	frame:SetClampedToScreen(true)
-	frame:SetMovable(true)
-	frame:EnableMouse(true)
-	frame:RegisterForDrag("LeftButton")
-	frame:SetScript("OnDragStart", frame.StartMoving)
-	frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-	tinsert(UISpecialFrames, "PolisenFrame")
+	frame, classic = Statskontoret.Window("PolisenFrame", "Polisen", WIDTH, 480)
 	-- Below the portrait and title bar; buttons in the strip under the inset.
 	local dy, left = classic and -12 or 0, classic and 66 or 24
 

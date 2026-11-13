@@ -239,11 +239,7 @@ local function Broadcast(r)
 		fields[i] = ""
 		msg = table.concat(fields, ";")
 	end
-	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-		C_ChatInfo.SendAddonMessage(ns.PREFIX, msg, "GUILD")
-	elseif SendAddonMessage then
-		SendAddonMessage(ns.PREFIX, msg, "GUILD")
-	end
+	Statskontoret.SendAddon(ns.PREFIX, msg, "GUILD")
 end
 
 -- Fill in the killer from the recap's hits.

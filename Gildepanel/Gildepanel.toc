@@ -4,6 +4,7 @@
 ## IconTexture: Interface\Icons\INV_Misc_Coin_02
 ## Notes: A compact bar for THÖNDERSTÖRM that drops open into a panel when you hover over it: your Skatteverket standing and tax, the guild's favourites, who is online, and your Swedbank loans. Also an Addons window that opens the other guild addons and toggles their automatic settings and sets the camera's max zoom distance, keeps your herb/mineral tracking on across logins, a chat warning an hour of play before your standing drops, and a celebration on screen and in sound when you pay your tax. Only reads what Skatteverket and Swedbank save; sends nothing.
 ## Version: 2.9
+## Dependencies: Statskontoret
 ## OptionalDeps: Skatteverket, Swedbank
 ## SavedVariables: GildepanelDB
 Gildepanel.lua

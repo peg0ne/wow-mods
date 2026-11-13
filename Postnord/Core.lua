@@ -40,9 +40,7 @@ end
 
 local function Send(msg)
 	if not InOurGuild() then return end
-	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-		C_ChatInfo.SendAddonMessage(PREFIX, msg, "GUILD")
-	end
+	Statskontoret.SendAddon(PREFIX, msg, "GUILD")
 end
 
 local function Announce()

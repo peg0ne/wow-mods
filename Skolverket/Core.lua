@@ -54,13 +54,7 @@ function ns.InOurGuild()
 	return GetGuildInfo("player") == ns.GUILD
 end
 
-local function RequestRoster()
-	if C_GuildInfo and C_GuildInfo.GuildRoster then
-		C_GuildInfo.GuildRoster()
-	elseif GuildRoster then
-		GuildRoster()
-	end
-end
+local RequestRoster = Statskontoret.RequestRoster
 
 -- This character's full name as the guild sees it. Forever names have two
 -- words and UnitName gives only the first, so look it up by GUID in the
@@ -102,11 +96,7 @@ end
 local outbox, tokens, lastRefill, pumping = {}, 8, 0, false
 
 local function RawSend(msg)
-	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-		C_ChatInfo.SendAddonMessage(ns.PREFIX, msg, "GUILD")
-	elseif SendAddonMessage then
-		SendAddonMessage(ns.PREFIX, msg, "GUILD")
-	end
+	Statskontoret.SendAddon(ns.PREFIX, msg, "GUILD")
 end
 
 local function Pump()

@@ -38,13 +38,7 @@ function ns.InOurGuild()
 	return GetGuildInfo("player") == ns.GUILD
 end
 
-local function RequestRoster()
-	if C_GuildInfo and C_GuildInfo.GuildRoster then
-		C_GuildInfo.GuildRoster()
-	elseif GuildRoster then
-		GuildRoster()
-	end
-end
+local RequestRoster = Statskontoret.RequestRoster
 ns.RequestRoster = RequestRoster
 
 -- This character's full name as the guild sees it (two-word Forever names;
@@ -77,11 +71,7 @@ end
 
 local function Send(msg)
 	if not IsInGuild() then return end
-	if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-		C_ChatInfo.SendAddonMessage(ns.PREFIX, msg, "GUILD")
-	elseif SendAddonMessage then
-		SendAddonMessage(ns.PREFIX, msg, "GUILD")
-	end
+	Statskontoret.SendAddon(ns.PREFIX, msg, "GUILD")
 end
 
 local function Changed()
@@ -254,11 +244,7 @@ function ns.Rows(filter)
 end
 
 function ns.Invite(name)
-	if C_PartyInfo and C_PartyInfo.InviteUnit then
-		C_PartyInfo.InviteUnit(name)
-	elseif InviteUnit then
-		InviteUnit(name)
-	end
+	Statskontoret.Invite(name)
 end
 
 ---------------------------------------------------------------------------
