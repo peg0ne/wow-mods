@@ -367,6 +367,9 @@ local PLATE_SETTINGS = {
 	{ value = "0", names = { "nameplateShowFriendlyNpcs", "nameplateShowFriendlyNPCs" } },
 	{ value = "1", label = "bara namn på namnskyltarna",
 		names = { "nameplateShowOnlyNameForFriendlyPlayerUnits", "nameplateShowOnlyNames" } },
+	-- Past this the nameplate goes and the game's own floating name (other
+	-- guild line, no colors) takes over: as far as the game allows (0.4.2).
+	{ value = "60", names = { "nameplatePlayerMaxDistance", "nameplateMaxDistance" } },
 }
 local platesWaiting = false
 
@@ -385,7 +388,8 @@ local function ApplyPlateSettings()
 				if now ~= nil then
 					found = true
 					if db.platesSaved[name] == nil then db.platesSaved[name] = now end
-					if now ~= s.value then SetSetting(name, s.value) end
+					local same = now == s.value or (tonumber(now) ~= nil and tonumber(now) == tonumber(s.value))
+					if not same then SetSetting(name, s.value) end
 				end
 			end
 			if not found and s.label then
