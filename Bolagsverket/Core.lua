@@ -11,7 +11,8 @@
 --
 -- /bv namnskyltar (0.3, off by default) puts friendly players' nameplates in
 -- their place: names only, no friendly NPCs. Those are frames, so guildmates
--- get your color and the bolt there too, other players their class color, and
+-- get their color and the bolt there too, your group the party color, others
+-- keep the game's own color, and
 -- everyone in a guild "<Guild>" under the name. The game's settings it changes
 -- are saved and put back when it is turned off, and only changed out of
 -- combat. In dungeons and raids the game locks friendly nameplates, so they
@@ -128,6 +129,15 @@ local function ClassColor(unit)
 	return class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
 end
 
+-- In your party or raid (for a nameplate's unit).
+local function InGroup(unit)
+	for _, fn in ipairs({ UnitInParty, UnitInRaid }) do
+		local ok, v = pcall(fn, unit)
+		if ok and Known(v) then return true end
+	end
+	return false
+end
+
 local function SetColor(fs, r, g, b, a)
 	applying = true
 	fs:SetTextColor(r, g, b, a)
@@ -187,17 +197,16 @@ local function Apply(fs)
 	local base = t.base
 	local guildmate = exists and not IsMe(unit) and InMyGuild(unit)
 
-	-- Guildmates take the guild color wherever they are. Otherwise your party
-	-- color is for the party frames; on nameplates everyone else keeps their
-	-- class color, so the guild stands out in a crowd.
+	-- Guildmates take the guild color wherever they are; your group (and
+	-- guildmates, with the guild color off) the party color or class color,
+	-- as on the party frames. On nameplates everyone else keeps the game's
+	-- own color (0.4.1: they had their class color, which was unwanted).
 	local c
 	if exists and db.color then
 		if guildmate and db.guildCustom then
 			c = db.guildColor
-		elseif db.custom and (guildmate or not plate) then
-			c = db.partyColor
-		else
-			c = ClassColor(unit)
+		elseif guildmate or not plate or InGroup(unit) then
+			c = db.custom and db.partyColor or ClassColor(unit)
 		end
 	end
 	if c then

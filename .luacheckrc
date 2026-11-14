@@ -27,7 +27,7 @@ globals = {
 read_globals = {
 	"GetServerTime", "GossipFrame", "InCombatLockdown", "QuestFrame",
 	"AcceptQuest", "Ambiguate", "BackdropTemplateMixin", "BokforingFrame",
-	"COMBATLOG_OBJECT_REACTION_HOSTILE", "COMBATLOG_OBJECT_TYPE_GUARDIAN", "ColorPickerFrame", "CompactUnitFrame_UpdateName", "PartyFrame", "UnitIsInMyGuild", "UnitIsUnit",
+	"COMBATLOG_OBJECT_REACTION_HOSTILE", "COMBATLOG_OBJECT_TYPE_GUARDIAN", "ColorPickerFrame", "CompactUnitFrame_UpdateName", "PartyFrame", "UnitInParty", "UnitInRaid", "UnitIsInMyGuild", "UnitIsUnit",
 	"COMBATLOG_OBJECT_TYPE_PET", "COMBATLOG_OBJECT_TYPE_PLAYER", "COMBATLOG_XPGAIN_FIRSTPERSON",
 	"C_AddOns", "C_CVar", "C_ChatInfo", "C_Container", "C_DeathRecap", "C_EventUtils", "C_GossipInfo",
 	"C_GuildInfo", "C_Item", "C_Map", "C_Minimap", "C_Console", "ConsoleGetAllCommands", "C_NamePlate", "UnitCanAttack", "C_PartyInfo", "C_QuestLog", "C_Spell",
