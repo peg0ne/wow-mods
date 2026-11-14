@@ -1,7 +1,9 @@
 -- Bolagsverket: the register of who belongs to which company. Colors the
 -- names on the party (and raid) frames by class and puts a small lightning
 -- bolt next to the names of guildmates. Instead of the class colors, every
--- party name can take one color you pick (/bv egen, /bv välj).
+-- party name can take one color you pick (/bv egen, /bv välj), and
+-- guildmates one of their own, on the party frames and nameplates alike
+-- (/bv gillefärg, /bv välj gille; 0.4).
 --
 -- The names floating over characters are drawn by the game and can't be
 -- recolored, but the game can show a guild's name under its members' names.
@@ -31,7 +33,12 @@ local ADDON = ...
 -- partyColor: the color you picked, used instead of class colors when custom
 -- is on (the default). Starts as the party chat's light blue.
 -- plates: friendly players' nameplates instead of the floating names.
-local defaults = { color = true, icon = true, custom = true, plates = false, partyColor = { r = 0.67, g = 0.67, b = 1 } }
+-- guildCustom/guildColor (0.4): guildmates' own color, everywhere (party
+-- frames and nameplates); starts as the guild chat's green.
+local defaults = {
+	color = true, icon = true, custom = true, plates = false, partyColor = { r = 0.67, g = 0.67, b = 1 },
+	guildCustom = true, guildColor = { r = 0.25, g = 1, b = 0.25 },
+}
 local SETTINGS_VERSION = 2
 local db
 local tracked = {}       -- name FontString -> { frame, icon, base = { r, g, b, a } }
@@ -180,11 +187,18 @@ local function Apply(fs)
 	local base = t.base
 	local guildmate = exists and not IsMe(unit) and InMyGuild(unit)
 
-	-- On nameplates your own color is for guildmates; everyone else keeps
-	-- their class color, so the guild stands out in a crowd.
+	-- Guildmates take the guild color wherever they are. Otherwise your party
+	-- color is for the party frames; on nameplates everyone else keeps their
+	-- class color, so the guild stands out in a crowd.
 	local c
 	if exists and db.color then
-		if db.custom and (guildmate or not plate) then c = db.partyColor else c = ClassColor(unit) end
+		if guildmate and db.guildCustom then
+			c = db.guildColor
+		elseif db.custom and (guildmate or not plate) then
+			c = db.partyColor
+		else
+			c = ClassColor(unit)
+		end
 	end
 	if c then
 		SetColor(fs, c.r, c.g, c.b, base[4])
@@ -382,27 +396,30 @@ end
 
 local function Status()
 	local kind = db.custom and ("|c" .. Hex(db.partyColor) .. "egen färg|r") or "klassfärg"
+	local guild = db.guildCustom and ("|c" .. Hex(db.guildColor) .. "egen färg|r") or "som andra"
 	local title = db.guildTitle == nil and "finns inte i klienten" or (db.guildTitle and "på" or "av")
-	Print(string.format("färg på namnen: %s (%s), blixt vid gillemedlemmar: %s, gillets namn över huvudet: %s, namnskyltar: %s%s.",
-		db.color and "på" or "av", kind, db.icon and "på" or "av", title, db.plates and "på" or "av",
+	Print(string.format("färg på namnen: %s (%s, gillemedlemmar %s), blixt vid gillemedlemmar: %s, gillets namn över huvudet: %s, namnskyltar: %s%s.",
+		db.color and "på" or "av", kind, guild, db.icon and "på" or "av", title, db.plates and "på" or "av",
 		platesWaiting and " (efter striden)" or ""))
 end
 
 -- The game's color picker, with the names changing as you drag. Picking a
--- color turns your own color on; Cancel puts back what was there before.
-local function PickColor()
+-- color turns that color on; Cancel puts back what was there before.
+-- colorKey/flagKey: "partyColor"/"custom" or "guildColor"/"guildCustom".
+local function PickColor(colorKey, flagKey)
 	local picker = ColorPickerFrame
 	if not picker then Print("färgväljaren finns inte i den här klienten.") return end
-	local old = { r = db.partyColor.r, g = db.partyColor.g, b = db.partyColor.b, custom = db.custom, color = db.color }
+	local cur = db[colorKey]
+	local old = { r = cur.r, g = cur.g, b = cur.b, flag = db[flagKey], color = db.color }
 	local function Changed()
 		local r, g, b = picker:GetColorRGB()
-		db.partyColor = { r = r, g = g, b = b }
-		db.custom, db.color = true, true
+		db[colorKey] = { r = r, g = g, b = b }
+		db[flagKey], db.color = true, true
 		ApplyAll()
 	end
 	local function Cancel()
-		db.partyColor = { r = old.r, g = old.g, b = old.b }
-		db.custom, db.color = old.custom, old.color
+		db[colorKey] = { r = old.r, g = old.g, b = old.b }
+		db[flagKey], db.color = old.flag, old.color
 		ApplyAll()
 	end
 	if picker.SetupColorPickerAndShow then
@@ -437,13 +454,19 @@ SlashCmdList.BOLAGSVERKET = function(msg)
 			return
 		end
 	elseif msg == "välj" or msg == "valj" then
-		PickColor()
+		PickColor("partyColor", "custom")
 		return
+	elseif msg == "välj gille" or msg == "valj gille" then
+		PickColor("guildColor", "guildCustom")
+		return
+	elseif msg == "gillefärg" or msg == "gillefarg" then
+		db.guildCustom = not db.guildCustom
+		if db.guildCustom then db.color = true end
 	elseif msg == "namnskyltar" or msg == "skyltar" then
 		db.plates = not db.plates
 		ApplyPlateSettings()
 	elseif msg ~= "" then
-		Print("/bv visar inställningarna, /bv färg slår på eller av färgen på namnen, /bv egen växlar mellan klassfärg och din egen färg, /bv välj väljer din egen färg, /bv gille slår på eller av blixten vid gillemedlemmar, /bv gillenamn slår på eller av gillets namn under namnen över huvudet, /bv namnskyltar visar andra spelares namn som namnskyltar med färg, blixt och gille (utanför instanser).")
+		Print("/bv visar inställningarna, /bv färg slår på eller av färgen på namnen, /bv egen växlar mellan klassfärg och din egen färg, /bv välj väljer din egen färg, /bv gillefärg slår på eller av en egen färg för gillemedlemmar, /bv välj gille väljer den, /bv gille slår på eller av blixten vid gillemedlemmar, /bv gillenamn slår på eller av gillets namn under namnen över huvudet, /bv namnskyltar visar andra spelares namn som namnskyltar med färg, blixt och gille (utanför instanser).")
 		return
 	end
 	ApplyAll()

@@ -950,6 +950,8 @@ local SETTINGS = {
 		{ key = "color", label = "Färg på gruppens namn", default = true, slash = { "BOLAGSVERKET", "färg" } },
 		{ key = "custom", label = "Egen färg istället för klassfärg", default = true, slash = { "BOLAGSVERKET", "egen" },
 			swatch = { key = "partyColor", slash = { "BOLAGSVERKET", "välj" }, default = { r = 0.67, g = 0.67, b = 1 } } },
+		{ key = "guildCustom", label = "Egen färg för gillemedlemmar", default = true, slash = { "BOLAGSVERKET", "gillefärg" },
+			swatch = { key = "guildColor", slash = { "BOLAGSVERKET", "välj gille" }, default = { r = 0.25, g = 1, b = 0.25 } } },
 		{ key = "icon", label = "Blixt vid gillemedlemmar", default = true, slash = { "BOLAGSVERKET", "gille" } },
 		{ key = "guildTitle", label = "Gillets namn över huvudet", default = true, slash = { "BOLAGSVERKET", "gillenamn" } },
 		{ key = "plates", label = "Namnskyltar: färg, blixt och gille över spelare", slash = { "BOLAGSVERKET", "namnskyltar" } },
