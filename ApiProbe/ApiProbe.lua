@@ -146,6 +146,72 @@ local function Probe()
 		local ok, value = pcall(GetCVar, cvar)
 		result.cvars[cvar] = ok and value or "error"
 	end
+	-- Every setting about names over heads and nameplates, with its value
+	-- (Bolagsverket's namnskyltar: which names this client uses).
+	local all = C_Console and C_Console.GetAllCommands or ConsoleGetAllCommands
+	result.nameCvars = {}
+	if all then
+		local ok, list = pcall(all)
+		for _, c in ipairs(ok and type(list) == "table" and list or {}) do
+			local name = type(c) == "table" and c.command
+			if type(name) == "string" and (name:lower():find("nameplate") or name:lower():find("unitname")) then
+				local okValue, value = pcall(GetCVar, name)
+				result.nameCvars[name] = okValue and value ~= nil and tostring(value) or "(no value)"
+			end
+		end
+	end
+	-- No list on this client (2026-11-14): try names from several game
+	-- versions; only the ones the client has are saved.
+	result.hasCommandList = all and true or false
+	for _, name in ipairs({
+		"nameplateShowFriends", "nameplateShowFriendlyPlayers", "nameplateShowFriendlyPlayerUnits",
+		"nameplateShowFriendlyNPCs", "nameplateShowFriendlyNpcs", "nameplateShowAll", "nameplateShowEnemies",
+		"nameplateShowSelf", "nameplateShowOnlyNames", "nameplateShowOnlyNameForFriendlyPlayerUnits",
+		"nameplateShowFriendlyMinions", "nameplateShowFriendlyPets", "nameplateShowFriendlyGuardians",
+		"nameplateShowFriendlyTotems", "nameplateShowFriendlyPlayerMinions", "nameplateShowFriendlyPlayerPets",
+		"nameplateShowFriendlyPlayerGuardians", "nameplateShowFriendlyPlayerTotems",
+		"nameplateShowEnemyMinions", "nameplateShowEnemyMinus", "nameplateShowEnemyPets",
+		"nameplateUseClassColorForFriendlyPlayerUnitNames", "nameplateShowClassColor", "nameplateShowFriendlyClassColor",
+		"ShowClassColorInFriendlyNameplate", "ShowClassColorInNameplate", "nameplateStyle", "nameplateSize",
+		"nameplateGlobalScale", "nameplateMaxDistance", "nameplateMotion", "nameplateOtherAtBase",
+		"nameplateHideHealthAndPower", "nameplateShowDebuffsOnFriendly", "nameplateResourceOnTarget",
+		"nameplateFriendlyHealthBar", "nameplateShowFriendlyHealthBars", "nameplateSimplified",
+		"UnitNameOwn", "UnitNameNPC", "UnitNamePlayerGuild", "UnitNamePlayerPVPTitle", "UnitNameGuildTitle",
+		"UnitNameFriendlyPlayerName", "UnitNameFriendlyPetName", "UnitNameFriendlyGuardianName",
+		"UnitNameFriendlyTotemName", "UnitNameFriendlyMinionName", "UnitNameEnemyPlayerName",
+		"UnitNameEnemyPetName", "UnitNameEnemyGuardianName", "UnitNameEnemyTotemName", "UnitNameEnemyMinionName",
+		"UnitNameNonCombatCreatureName", "UnitNameFriendlySpecialNPCName", "UnitNameHostleNPC",
+		"UnitNameInteractiveNPC", "UnitNameForceHideMinus", "ShowQuestUnitCircles", "findYourselfMode",
+	}) do
+		local ok, value = pcall(GetCVar, name)
+		if ok and value ~= nil then result.nameCvars[name] = tostring(value) end
+	end
+	-- The options panel's own settings: each checkbox names its variable.
+	-- "category name / label" -> variable = value, for anything about names.
+	result.panelSettings = {}
+	pcall(function()
+		local panel = _G.SettingsPanel
+		local cats = panel and panel.GetAllCategories and panel:GetAllCategories() or {}
+		local function Walk(cat, depth)
+			if depth > 4 or not cat then return end
+			local catName = cat.GetName and cat:GetName() or "?"
+			local layout = cat.GetLayout and cat:GetLayout()
+			local inits = layout and layout.GetInitializers and layout:GetInitializers() or {}
+			for _, init in ipairs(inits) do
+				local data = init.GetData and init:GetData() or init.data
+				local setting = data and data.setting
+				local var = setting and setting.GetVariable and setting:GetVariable()
+				local label = data and data.name or (setting and setting.GetName and setting:GetName())
+				local text = tostring(var) .. " " .. tostring(label) .. " " .. tostring(catName)
+				if var and (text:lower():find("name") or text:lower():find("plate")) then
+					local okValue, value = pcall(function() return setting:GetValue() end)
+					result.panelSettings[catName .. " / " .. tostring(label)] = tostring(var) .. " = " .. (okValue and tostring(value) or "?")
+				end
+			end
+			for _, sub in ipairs(cat.GetSubcategories and cat:GetSubcategories() or {}) do Walk(sub, depth + 1) end
+		end
+		for _, cat in ipairs(cats) do Walk(cat, 0) end
+	end)
 	if GetTotalAchievementPoints then
 		local ok, points = pcall(GetTotalAchievementPoints)
 		result.achievementPoints = ok and points or "error"

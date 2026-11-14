@@ -334,10 +334,16 @@ end
 -- before is kept in db.platesSaved and put back when it is turned off. The
 -- game refuses nameplate settings in combat, so changes wait for it to end.
 
+-- Each with the names it has had across game versions; every one the client
+-- has is set. This client (found with ApiProbe, 2026-11-14) has the newer
+-- nameplateShowFriendlyPlayers and nameplateShowOnlyNameForFriendlyPlayerUnits,
+-- not nameplateShowFriends or nameplateShowOnlyNames.
 local PLATE_SETTINGS = {
-	nameplateShowFriends = "1",       -- friendly players' nameplates
-	nameplateShowFriendlyNPCs = "0",  -- but not friendly NPCs'
-	nameplateShowOnlyNames = "1",     -- just the name, no health bar
+	{ value = "1", label = "vänliga spelares namnskyltar", needed = true,
+		names = { "nameplateShowFriendlyPlayers", "nameplateShowFriends" } },
+	{ value = "0", names = { "nameplateShowFriendlyNpcs", "nameplateShowFriendlyNPCs" } },
+	{ value = "1", label = "bara namn på namnskyltarna",
+		names = { "nameplateShowOnlyNameForFriendlyPlayerUnits", "nameplateShowOnlyNames" } },
 }
 local platesWaiting = false
 
@@ -349,11 +355,18 @@ local function ApplyPlateSettings()
 	platesWaiting = false
 	if db.plates then
 		db.platesSaved = db.platesSaved or {}
-		for name, value in pairs(PLATE_SETTINGS) do
-			local now = GetSetting(name)
-			if now ~= nil then
-				if db.platesSaved[name] == nil then db.platesSaved[name] = now end
-				if now ~= value then SetSetting(name, value) end
+		for _, s in ipairs(PLATE_SETTINGS) do
+			local found = false
+			for _, name in ipairs(s.names) do
+				local now = GetSetting(name)
+				if now ~= nil then
+					found = true
+					if db.platesSaved[name] == nil then db.platesSaved[name] = now end
+					if now ~= s.value then SetSetting(name, s.value) end
+				end
+			end
+			if not found and s.label then
+				Print("klienten har ingen inställning för " .. s.label .. (s.needed and "; namnskyltarna kan inte visas." or "."))
 			end
 		end
 		AllPlates()

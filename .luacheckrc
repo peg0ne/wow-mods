@@ -30,7 +30,7 @@ read_globals = {
 	"COMBATLOG_OBJECT_REACTION_HOSTILE", "COMBATLOG_OBJECT_TYPE_GUARDIAN", "ColorPickerFrame", "CompactUnitFrame_UpdateName", "PartyFrame", "UnitIsInMyGuild", "UnitIsUnit",
 	"COMBATLOG_OBJECT_TYPE_PET", "COMBATLOG_OBJECT_TYPE_PLAYER", "COMBATLOG_XPGAIN_FIRSTPERSON",
 	"C_AddOns", "C_CVar", "C_ChatInfo", "C_Container", "C_DeathRecap", "C_EventUtils", "C_GossipInfo",
-	"C_GuildInfo", "C_Item", "C_Map", "C_Minimap", "C_NamePlate", "UnitCanAttack", "C_PartyInfo", "C_QuestLog", "C_Spell",
+	"C_GuildInfo", "C_Item", "C_Map", "C_Minimap", "C_Console", "ConsoleGetAllCommands", "C_NamePlate", "UnitCanAttack", "C_PartyInfo", "C_QuestLog", "C_Spell",
 	"C_SuperTrack", "C_Timer", "C_TradeSkillUI", "C_XMLUtil", "CanMerchantRepair",
 	"ChatEdit_GetActiveWindow", "ChatFrame_AddMessageEventFilter", "ChatFrame_SendTell",
 	"ChatTypeInfo", "CompleteQuest", "CreateFrame", "CreateVector2D", "DEFAULT_CHAT_FRAME",

@@ -58,6 +58,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 - **Combat log is closed:** registering `COMBAT_LOG_EVENT_UNFILTERED` gets the addon blocked ("blocked from an action only available to the Blizzard UI"). Use `C_DeathRecap` (with `GetDeathRecapLink` for the latest ID) for what killed you.
 - **Hidden values:** `issecretvalue` exists. Some values can be hidden from addons and error when compared or printed; check them with `issecretvalue` first.
 - **Tooltips:** there's no `OnTooltipSetItem`/`OnTooltipSetUnit`; use `TooltipDataProcessor.AddTooltipPostCall`.
+- **Nameplate settings (2026-11-14):** the newer names: `nameplateShowFriendlyPlayers` (not `nameplateShowFriends`), `nameplateShowOnlyNameForFriendlyPlayerUnits` (not `nameplateShowOnlyNames`), `nameplateShowFriendlyNpcs`. ApiProbe saves every nameplate and unit-name setting with its value in `ApiProbeDB.nameCvars`.
 - **Vendor timing:** `MerchantFrame` isn't shown yet when `MERCHANT_SHOW` fires.
 - `ApiProbe/` records which functions and events exist into `WTF/Account/<account>/SavedVariables/ApiProbe.lua` (`/probe`, then `/reload`).
 
@@ -75,7 +76,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | SCB | 0.4 | Works in game; saves the whole guild roster (rank, class, level, notes, last online) to `SCBDB.roster` |
 | Kolapp | 0.4 | Works in game: quest tracker numbers and the quest on item tooltips; 0.4 only changes the tracker's shown text, which stops the "blocked action" errors in combat |
 | Statskontoret | 0.1 | New: shared library; not yet tested in game |
-| Bolagsverket | 0.3 | Works in game; 0.2 adds your own party color, 0.3 the nameplates (`/bv namnskyltar`); neither yet tested in game |
+| Bolagsverket | 0.3.1 | Works in game, including the nameplates (`/bv namnskyltar`; 0.3.1 uses this client's nameplate setting names). 0.2's own party color not yet tested in game |
 | Revisorsinspektionen | 0.2 | Retired in v1.17.0; 0.2 is an empty copy that switches itself off |
 
 ## Accepted ideas
