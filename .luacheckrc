@@ -48,7 +48,7 @@ read_globals = {
 	"GetTime", "STANDARD_TEXT_FONT", "GetTotalAchievementPoints", "GetTrackingInfo", "GetZoneText", "GuildRoster",
 	"InviteUnit", "DisableAddOn", "IsAddOnLoaded", "IsInGroup", "IsInGuild", "IsInInstance", "IsQuestCompletable",
 	"IsQuestComplete", "IsShiftKeyDown", "ItemRefTooltip", "LE_PARTY_CATEGORY_HOME", "LOCALIZED_CLASS_NAMES_MALE", "Minimap",
-	"NUM_BAG_SLOTS", "OpenMapAPI", "ShowUIPanel", "PanelTemplates_DeselectTab", "PanelTemplates_SelectTab",
+	"NUM_BAG_SLOTS", "ObjectiveTrackerFrame", "QuestWatchFrame", "OpenMapAPI", "ShowUIPanel", "PanelTemplates_DeselectTab", "PanelTemplates_SelectTab",
 	"PanelTemplates_TabResize", "PlaySound", "QUESTS_DISPLAYED", "QuestGetAutoAccept",
 	"QuestInfoFrame", "QuestInfoRewardsFrame", "QuestInfoTitleHeader", "QuestInfo_Display",
 	"QuestLogListScrollFrame", "QuestLogPushQuest", "QuestLogQuests_Update", "QuestLog_Update",
