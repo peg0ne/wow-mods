@@ -1,0 +1,8 @@
+## Interface: 16001
+## Title: Bolagsverket
+## Category: THÖNDERSTÖRM
+## IconTexture: Interface\Icons\INV_Misc_Note_02
+## Notes: Names on the party and raid frames in a color you pick (or class colors), and a lightning bolt next to the names of your guildmates. Optionally friendly players' nameplates in place of the floating names, colored, with the bolt and their guild. /bolagsverket for options.
+## Version: 0.3
+## SavedVariables: BolagsverketDB
+Core.lua

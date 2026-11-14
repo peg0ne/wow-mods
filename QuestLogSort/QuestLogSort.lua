@@ -375,6 +375,7 @@ local function Folded()
 end
 
 local busy = false -- folding or unfolding: our own watch changes
+local QueuePanel -- shows folded zones while the tracker has no quests (below)
 local function Fold(zone)
 	local c = CharDB()
 	local zones, names = ZoneOrder()
@@ -387,9 +388,7 @@ local function Fold(zone)
 		end
 	end
 	busy = false
-	if #WatchedQuests() == 0 then
-		Say("alla zoner är ihopfällda och trackern är tom. /qls öppna visar dem igen.")
-	end
+	QueuePanel()
 end
 
 local function Unfold(zone)
@@ -403,6 +402,7 @@ local function Unfold(zone)
 		end
 	end
 	busy = false
+	QueuePanel()
 end
 
 -- Opens every folded zone: /qls öppna, and when zone mode or the addon is
@@ -415,6 +415,7 @@ local function UnfoldAll()
 	for _, zone in pairs(CharDB().hidden) do zones[zone] = true end
 	for zone in pairs(CharDB().collapsed) do zones[zone] = true end
 	for zone in pairs(zones) do Unfold(zone) end
+	QueuePanel()
 end
 
 local function ToggleZone(zone)
@@ -447,8 +448,11 @@ local foldEvents = CreateFrame("Frame")
 foldEvents:RegisterEvent("QUEST_WATCH_LIST_CHANGED")
 foldEvents:RegisterEvent("QUEST_REMOVED")
 foldEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
+foldEvents:RegisterEvent("PLAYER_ENTERING_WORLD")
+foldEvents:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 foldEvents:SetScript("OnEvent", function(_, event, id)
 	if not ready then return end
+	QueuePanel()
 	if event == "QUEST_REMOVED" then
 		if id then CharDB().hidden[id] = nil end
 	elseif event == "PLAYER_REGEN_ENABLED" then
@@ -466,15 +470,8 @@ foldEvents:SetScript("OnEvent", function(_, event, id)
 	end
 end)
 
--- What each block shows, worked out once per frame (every block in one
--- tracker update asks): quest ID -> { name, above = folded zones over it,
--- gap, below = folded zones under the last quest, extra }.
-local plan, planAt = nil, nil
-local function Plan()
-	local now = GetTime()
-	if plan and planAt == now then return plan end
-	plan, planAt = {}, now
-	local zones, names = ZoneOrder()
+-- Folded zones as { name, count, rank }, in tracker order.
+local function FoldedRows(names)
 	local rank = {}
 	for i, name in pairs(names) do
 		local r = ZoneRank(i, names)
@@ -488,6 +485,19 @@ local function Plan()
 		if a.rank ~= b.rank then return a.rank < b.rank end
 		return a.name < b.name
 	end)
+	return rows
+end
+
+-- What each block shows, worked out once per frame (every block in one
+-- tracker update asks): quest ID -> { name, above = folded zones over it,
+-- gap, below = folded zones under the last quest, extra }.
+local plan, planAt = nil, nil
+local function Plan()
+	local now = GetTime()
+	if plan and planAt == now then return plan end
+	plan, planAt = {}, now
+	local zones, names = ZoneOrder()
+	local rows = FoldedRows(names)
 	local nextRow, last, lastID, shown = 1, nil, nil, 0
 	for _, id in ipairs(WatchedQuests()) do
 		local z = zones[id]
@@ -553,6 +563,65 @@ local function ShowLine(line, zone, count)
 	end
 	line.text:SetTextColor(1, 0.82, 0)
 	line:Show()
+end
+
+-- With every zone folded no quest is watched, the tracker has no blocks to
+-- carry the zone lines and hides itself. Then this small frame of our own
+-- shows them where the tracker's quests would start, so they can still be
+-- clicked open. It is an ordinary frame, so it can show in combat too.
+local panel
+local function UpdatePanel()
+	local rows = {}
+	if ready and Enabled() and ByZone() and #WatchedQuests() == 0 then
+		local _, names = ZoneOrder()
+		rows = FoldedRows(names)
+	end
+	if #rows == 0 then
+		if panel then panel:Hide() end
+		return
+	end
+	if not panel then
+		panel = CreateFrame("Frame", "QuestLogSortFoldedZones", UIParent)
+		panel:SetFrameStrata("LOW")
+	end
+	local tracker = ObjectiveTrackerFrame or QuestWatchFrame
+	panel:ClearAllPoints()
+	if tracker and tracker.Header then
+		panel:SetPoint("TOPLEFT", tracker.Header, "BOTTOMLEFT", 12, -4)
+	elseif tracker then
+		panel:SetPoint("TOPLEFT", tracker, "TOPLEFT", 12, -30)
+	else
+		panel:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -80, -250)
+	end
+	local width = tracker and tracker:GetWidth() or 0
+	panel:SetWidth(width > 50 and width - 24 or 220)
+	panel:SetHeight(ROW * #rows)
+	if lines[panel] then
+		for _, line in ipairs(lines[panel]) do line:Hide() end
+	end
+	for i, row in ipairs(rows) do
+		local line = ZoneLine(panel, i)
+		line:ClearAllPoints()
+		line:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -ROW * (i - 1))
+		line:SetPoint("RIGHT", panel, "RIGHT")
+		ShowLine(line, row.name, row.count)
+	end
+	panel:Show()
+end
+
+local panelPending = false
+QueuePanel = function()
+	if panelPending then return end
+	panelPending = true
+	-- Once the watch list has settled.
+	C_Timer.After(0.1, function()
+		panelPending = false
+		local ok, err = pcall(UpdatePanel)
+		if not ok and err ~= lastError then
+			lastError = err
+			print("|cffff8040QuestLogSort error:|r " .. tostring(err))
+		end
+	end)
 end
 
 local function PutBack(block)
@@ -648,6 +717,7 @@ SlashCmdList.QUESTLOGSORT = function(msg)
 		QuestLogSortDB.trackerMode = zone and "zone" or nil
 		failedOrder = nil -- the new order deserves a try
 		if not zone then UnfoldAll() end
+		QueuePanel()
 		Say(zone and "trackern sorteras nu zon för zon, zonen du är i först: oklara först, sedan klara, efter nivå inom varje zon. Klicka på en zon för att fälla ihop den."
 			or "trackern sorteras nu efter nivå: oklara först, sedan klara.")
 		if not Enabled() then
@@ -679,6 +749,7 @@ SlashCmdList.QUESTLOGSORT = function(msg)
 		return
 	end
 	QuestLogSortDB.disabled = not on or nil
+	QueuePanel()
 	if on then
 		Say("på. Questloggen och trackern sorteras igen.")
 		if QuestScrollFrame and QuestScrollFrame:IsVisible() and not InCombat() then pcall(Reorder) end

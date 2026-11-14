@@ -10,8 +10,8 @@ exclude_files = { ".git", "tools" }
 
 -- Globals the addons own: SavedVariables, slash commands, library tables.
 globals = {
-	"ApiProbeBlocked", "ApiProbeDB", "ArbetsformedlingenCharDB", "AtervinningscentralenDB",
-	"DodsannonserDB", "EniroCharDB", "GildepanelDB", "HandlaggarenDB", "KolappDB", "PolisenDB",
+	"ApiProbeBlocked", "ApiProbeDB", "BolagsverketDB", "SLASH_BOLAGSVERKET1", "SLASH_BOLAGSVERKET2", "ArbetsformedlingenCharDB", "AtervinningscentralenDB",
+	"DodsannonserDB", "EniroCharDB", "FrokenUrDB", "SLASH_FROKENUR1", "SLASH_FROKENUR2", "GildepanelDB", "HandlaggarenDB", "KolappDB", "PolisenDB",
 	"PostnordDB", "Rattsmedicinalverket", "RattsmedicinalverketDB",
 	"SCBCharDB", "Statskontoret", "SCBDB", "SLASH_APIPROBE1", "SLASH_ARBETSFORMEDLINGEN1", "SLASH_ARBETSFORMEDLINGEN2",
 	"SLASH_ATERVINNING1", "SLASH_ATERVINNING2", "SLASH_DODSANNONSER1", "SLASH_DODSANNONSER2",
@@ -27,10 +27,10 @@ globals = {
 read_globals = {
 	"GetServerTime", "GossipFrame", "InCombatLockdown", "QuestFrame",
 	"AcceptQuest", "Ambiguate", "BackdropTemplateMixin", "BokforingFrame",
-	"COMBATLOG_OBJECT_REACTION_HOSTILE", "COMBATLOG_OBJECT_TYPE_GUARDIAN",
+	"COMBATLOG_OBJECT_REACTION_HOSTILE", "COMBATLOG_OBJECT_TYPE_GUARDIAN", "ColorPickerFrame", "CompactUnitFrame_UpdateName", "PartyFrame", "UnitIsInMyGuild", "UnitIsUnit",
 	"COMBATLOG_OBJECT_TYPE_PET", "COMBATLOG_OBJECT_TYPE_PLAYER", "COMBATLOG_XPGAIN_FIRSTPERSON",
 	"C_AddOns", "C_CVar", "C_ChatInfo", "C_Container", "C_DeathRecap", "C_EventUtils", "C_GossipInfo",
-	"C_GuildInfo", "C_Item", "C_Map", "C_Minimap", "C_PartyInfo", "C_QuestLog", "C_Spell",
+	"C_GuildInfo", "C_Item", "C_Map", "C_Minimap", "C_NamePlate", "UnitCanAttack", "C_PartyInfo", "C_QuestLog", "C_Spell",
 	"C_SuperTrack", "C_Timer", "C_TradeSkillUI", "C_XMLUtil", "CanMerchantRepair",
 	"ChatEdit_GetActiveWindow", "ChatFrame_AddMessageEventFilter", "ChatFrame_SendTell",
 	"ChatTypeInfo", "CompleteQuest", "CreateFrame", "CreateVector2D", "DEFAULT_CHAT_FRAME",
@@ -45,10 +45,10 @@ read_globals = {
 	"GetQuestItemLink", "GetQuestLink", "GetQuestLogLeaderBoard", "GetQuestLogQuestText",
 	"GetQuestLogSpecialItemInfo", "GetQuestLogTitle", "GetQuestMoneyToGet", "GetQuestReward",
 	"GetRealZoneText", "GetRealmName", "GetRepairAllCost", "GetSpellInfo", "GetSubZoneText",
-	"GetTime", "GetTotalAchievementPoints", "GetTrackingInfo", "GetZoneText", "GuildRoster",
+	"GetTime", "STANDARD_TEXT_FONT", "GetTotalAchievementPoints", "GetTrackingInfo", "GetZoneText", "GuildRoster",
 	"InviteUnit", "DisableAddOn", "IsAddOnLoaded", "IsInGroup", "IsInGuild", "IsInInstance", "IsQuestCompletable",
 	"IsQuestComplete", "IsShiftKeyDown", "ItemRefTooltip", "LE_PARTY_CATEGORY_HOME", "LOCALIZED_CLASS_NAMES_MALE", "Minimap",
-	"NUM_BAG_SLOTS", "PanelTemplates_DeselectTab", "PanelTemplates_SelectTab",
+	"NUM_BAG_SLOTS", "OpenMapAPI", "ShowUIPanel", "PanelTemplates_DeselectTab", "PanelTemplates_SelectTab",
 	"PanelTemplates_TabResize", "PlaySound", "QUESTS_DISPLAYED", "QuestGetAutoAccept",
 	"QuestInfoFrame", "QuestInfoRewardsFrame", "QuestInfoTitleHeader", "QuestInfo_Display",
 	"QuestLogListScrollFrame", "QuestLogPushQuest", "QuestLogQuests_Update", "QuestLog_Update",

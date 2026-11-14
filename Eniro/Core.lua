@@ -301,6 +301,12 @@ end)
 SLASH_ENIRO1 = "/eniro"
 SLASH_ENIRO2 = "/hitta"
 SlashCmdList.ENIRO = function(msg)
+	local first = strtrim(msg or ""):lower()
+	-- The map search finds zones for anyone, guild or not.
+	if first == "sök" or first == "sok" then
+		if ns.FocusSearch then ns.FocusSearch() else Print("sökrutan har inte laddats; starta om spelet.") end
+		return
+	end
 	if not ns.InOurGuild() then
 		Print("den här karaktären är inte med i " .. ns.GUILD .. ".")
 		return
@@ -311,6 +317,6 @@ SlashCmdList.ENIRO = function(msg)
 	elseif cmd == "" then
 		ns.ToggleWindow()
 	else
-		Print("/eniro öppnar fönstret, /eniro dela slår på eller av delning av din position.")
+		Print("/eniro öppnar fönstret, /eniro dela slår på eller av delning av din position, /eniro sök söker på kartan.")
 	end
 end

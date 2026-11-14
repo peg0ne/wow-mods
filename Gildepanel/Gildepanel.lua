@@ -875,6 +875,16 @@ local function ChooseCamera(factor)
 	return got
 end
 
+-- The Addons window's tabs, in order. "windows" holds the WINDOWS buttons,
+-- "game" also the camera slider; every tab shows the SETTINGS groups with
+-- its key.
+local TABS = {
+	{ key = "windows", label = "Fönster" },
+	{ key = "quests", label = "Uppdrag" },
+	{ key = "guild", label = "Gillet" },
+	{ key = "game", label = "Spelet" },
+}
+
 local WINDOWS = {
 	{ "Skatteverket", "Skatteverket", "SKATTEVERKET" },
 	{ "Skatteverket", "Yrkesregister", "SKATTEVERKET", "yrken" },
@@ -896,12 +906,15 @@ local WINDOWS = {
 
 -- invert: the addon stores "quiet", the box shows the opposite.
 -- default: the value when the addon has not saved one yet.
+-- swatch: a color square after the label showing db[swatch.key] ({ r, g, b },
+-- swatch.default until saved); clicking it runs swatch.slash (a color picker).
+-- tab: which of the window's TABS the group is on.
 local SETTINGS = {
-	{ addon = "Atervinningscentralen", title = "Återvinningscentralen", db = "AtervinningscentralenDB", items = {
+	{ addon = "Atervinningscentralen", tab = "game", title = "Återvinningscentralen", db = "AtervinningscentralenDB", items = {
 		{ key = "sell", label = "Sälj grått hos handlare", default = true },
 		{ key = "repair", label = "Laga utrustningen", default = true },
 	} },
-	{ addon = "Handlaggaren", title = "Handläggaren", db = "HandlaggarenDB", items = {
+	{ addon = "Handlaggaren", tab = "quests", title = "Handläggaren", db = "HandlaggarenDB", items = {
 		{ key = "on", label = "Ta och lämna in uppdrag", default = true },
 		{ key = "pickBest", label = "Välj dyraste belöningen själv" },
 		{ key = "share", label = "Dela nya uppdrag med gruppen" },
@@ -911,32 +924,43 @@ local SETTINGS = {
 		{ key = "repeatable", label = "Ta upprepningsbara uppdrag" },
 		{ key = "announce", label = "Säg till gruppen när ett uppdrag är klart", default = true },
 	} },
-	{ addon = "Kolapp", title = "Kölapp", db = "KolappDB", items = {
+	{ addon = "Kolapp", tab = "quests", title = "Kölapp", db = "KolappDB", items = {
 		{ key = "chat", label = "Questkedjor i chatten", default = true },
 		{ key = "items", label = "Uppdrag på föremålens tips", default = true },
 	} },
-	{ addon = "Dodsannonser", title = "Dödsannonser", db = "DodsannonserDB", items = {
+	{ addon = "Dodsannonser", tab = "guild", title = "Dödsannonser", db = "DodsannonserDB", items = {
 		{ key = "quiet", label = "Visa nya i chatten", invert = true },
 		{ key = "guildChat", label = "Skriv mina egna i gillechatten", default = true },
 		{ key = "noLevels", label = "Annonsera nya nivåer", invert = true },
 		{ key = "noPets", label = "Annonsera husdjurens nya nivåer", invert = true },
 	} },
-	{ addon = "Polisen", title = "Polisen", db = "PolisenDB", items = {
+	{ addon = "Polisen", tab = "guild", title = "Polisen", db = "PolisenDB", items = {
 		{ key = "alarm", label = "Varning på skärmen och ljud", default = true },
 		{ key = "quiet", label = "Visa andras observationer", invert = true },
 	} },
-	{ addon = "Arbetsformedlingen", title = "Arbetsförmedlingen", db = "ArbetsformedlingenCharDB", items = {
+	{ addon = "Arbetsformedlingen", tab = "quests", title = "Arbetsförmedlingen", db = "ArbetsformedlingenCharDB", items = {
 		{ key = "quiet", label = "Visa nya annonser i chatten", invert = true },
 	} },
 	-- trackerMode is "zone" or nil; any value counts as checked.
-	{ addon = "QuestLogSort", title = "QuestLogSort", db = "QuestLogSortDB", items = {
+	{ addon = "QuestLogSort", tab = "quests", title = "QuestLogSort", db = "QuestLogSortDB", items = {
 		{ key = "disabled", label = "Sortera questlogg och tracker", invert = true, slash = { "QUESTLOGSORT", "på", "av" } },
 		{ key = "trackerMode", label = "Trackern zon för zon", slash = { "QUESTLOGSORT", "zon", "nivå" } },
 	} },
-	{ addon = "Eniro", title = "Eniro", db = "EniroCharDB", items = {
+	{ addon = "Bolagsverket", tab = "guild", title = "Bolagsverket", db = "BolagsverketDB", items = {
+		{ key = "color", label = "Färg på gruppens namn", default = true, slash = { "BOLAGSVERKET", "färg" } },
+		{ key = "custom", label = "Egen färg istället för klassfärg", default = true, slash = { "BOLAGSVERKET", "egen" },
+			swatch = { key = "partyColor", slash = { "BOLAGSVERKET", "välj" }, default = { r = 0.67, g = 0.67, b = 1 } } },
+		{ key = "icon", label = "Blixt vid gillemedlemmar", default = true, slash = { "BOLAGSVERKET", "gille" } },
+		{ key = "guildTitle", label = "Gillets namn över huvudet", default = true, slash = { "BOLAGSVERKET", "gillenamn" } },
+		{ key = "plates", label = "Namnskyltar: färg, blixt och gille över spelare", slash = { "BOLAGSVERKET", "namnskyltar" } },
+	} },
+	{ addon = "Eniro", tab = "guild", title = "Eniro", db = "EniroCharDB", items = {
 		{ key = "share", label = "Dela min position med gillet", slash = { "ENIRO", "dela" } },
 	} },
-	{ addon = ADDON, title = "Gildepanel", db = "GildepanelDB", items = {
+	{ addon = "FrokenUr", tab = "game", title = "Fröken Ur", db = "FrokenUrDB", items = {
+		{ key = "on", label = "Tid på nedkylningarna", default = true, slash = { "FROKENUR", "på", "av" } },
+	} },
+	{ addon = ADDON, tab = "game", title = "Gildepanel", db = "GildepanelDB", items = {
 		{ key = "warn", label = "Förvarna innan skatteställningen sjunker", default = true },
 		{ key = "celebrate", label = "Fira när du betalar skatt", default = true },
 		{ key = "celebrateQuiet", label = "Med ljud", invert = true },
@@ -992,6 +1016,12 @@ local function RefreshHub()
 		row.header:SetText(row.group.title .. (loaded and "" or "  |cff808080(inte på)|r"))
 		for _, cb in ipairs(row.boxes) do
 			cb:SetChecked(loaded and SettingValue(row.group, cb.item))
+			if cb.swatch then
+				local t = _G[row.group.db]
+				local c = type(t) == "table" and type(t[cb.item.swatch.key]) == "table" and t[cb.item.swatch.key] or cb.item.swatch.default
+				SetColor(cb.swatch.color, c.r, c.g, c.b, loaded and 1 or 0.3)
+				cb.swatch:SetEnabled(loaded and true or false)
+			end
 			if loaded then
 				cb:Enable()
 				cb.label:SetTextColor(1, 1, 1)
@@ -1039,14 +1069,52 @@ local function BuildHub()
 	Text(hub, "GameFontNormal", "TOPLEFT", classic and 66 or PAD, -34):SetText("Addons")
 	local top = classic and -66 or -34
 
-	-- Windows, four buttons a row.
-	Section(hub, "Fönster", top)
-	hub.windows = {}
+	-- Tabs (2.13): everything on one page had grown too tall. Each tab is a
+	-- page covering the window, so the same offsets work on all of them.
+	hub.windows, hub.groups, hub.tabs, hub.pages = {}, {}, {}, {}
+	local GAP = 6
+	local tw = (HW - 2 * PAD - GAP * (#TABS - 1)) / #TABS
+	local function ShowTab(key)
+		if not hub.pages[key] then key = TABS[1].key end
+		db.hubTab = key
+		for k, page in pairs(hub.pages) do page:SetShown(k == key) end
+		for _, t in ipairs(hub.tabs) do
+			local on = t.key == key
+			if on then t:LockHighlight() else t:UnlockHighlight() end
+			local fs = t:GetFontString()
+			if on then fs:SetTextColor(1, 0.82, 0) else fs:SetTextColor(0.8, 0.8, 0.8) end
+			t.mark:SetShown(on)
+		end
+	end
+	for i, tab in ipairs(TABS) do
+		local t = Button(hub, tab.label, tw, function() ShowTab(tab.key) end)
+		t.key = tab.key
+		t:SetPoint("TOPLEFT", PAD + (i - 1) * (tw + GAP), top)
+		t.mark = t:CreateTexture(nil, "OVERLAY")
+		SetColor(t.mark, 1, 0.82, 0, 0.9)
+		t.mark:SetHeight(2)
+		t.mark:SetPoint("TOPLEFT", t, "BOTTOMLEFT", 4, -2)
+		t.mark:SetPoint("TOPRIGHT", t, "BOTTOMRIGHT", -4, -2)
+		table.insert(hub.tabs, t)
+		local page = CreateFrame("Frame", nil, hub)
+		page:SetAllPoints()
+		hub.pages[tab.key] = page
+	end
+	local line = hub:CreateTexture(nil, "ARTWORK")
+	SetColor(line, 1, 0.82, 0, 0.25)
+	line:SetHeight(1)
+	line:SetPoint("TOPLEFT", PAD, top - 28)
+	line:SetPoint("TOPRIGHT", -PAD, top - 28)
+	local first = top - 40
+	local lowest = first
+
+	-- Fönster: four buttons a row.
+	local page = hub.pages.windows
 	local PER_ROW = 4
 	local bw = (HW - 2 * PAD - 8 * (PER_ROW - 1)) / PER_ROW
-	local y = top - 24
+	local y = first
 	for i, w in ipairs(WINDOWS) do
-		local b = Button(hub, w[2], bw, function()
+		local b = Button(page, w[2], bw, function()
 			if not w.page then RunSlash(w[3], w[4] or "", w[2]) return end
 			local api = API()
 			if api and api.Toggle then api.Toggle(w.page) else Print("Skatteverket är inte på.") end
@@ -1057,14 +1125,16 @@ local function BuildHub()
 		if col == PER_ROW - 1 or i == #WINDOWS then y = y - 26 end
 		table.insert(hub.windows, b)
 	end
+	lowest = math.min(lowest, y)
 
-	-- Camera distance.
-	y = y - 10
-	Section(hub, "Kamera", y)
+	-- Spelet starts with the camera distance.
+	page = hub.pages.game
+	y = first
+	Section(page, "Kamera", y)
 	y = y - 24
-	local camLabel = Text(hub, "GameFontHighlightSmall", "TOPLEFT", PAD, y)
+	local camLabel = Text(page, "GameFontHighlightSmall", "TOPLEFT", PAD, y)
 	y = y - 18
-	local slider = CreateFrame("Slider", nil, hub)
+	local slider = CreateFrame("Slider", nil, page)
 	slider:SetOrientation("HORIZONTAL")
 	slider:SetSize(HW - 2 * PAD - 70, 14)
 	slider:SetPoint("TOPLEFT", PAD + 2, y)
@@ -1109,7 +1179,7 @@ local function BuildHub()
 	slider:SetScript("OnMouseWheel", function(self, delta)
 		self:SetValue(self:GetValue() + delta * 0.1)
 	end)
-	local reset = Button(hub, "Standard", 62, function()
+	local reset = Button(page, "Standard", 62, function()
 		db.cameraMax = nil
 		SetCamera(DefaultCamera())
 		hub.camera()
@@ -1123,47 +1193,78 @@ local function BuildHub()
 		slider.setting = false
 		ShowCamera(v)
 	end
-	y = y - 22
+	local gameTop = y - 32
 
-	-- Automatic settings, grouped by addon, in two columns: the groups in
+	-- The settings, grouped by addon, each tab in two columns: the groups in
 	-- order, the second column starting once the first holds half.
-	y = y - 10
-	Section(hub, "Automatik", y)
-	y = y - 24
-	hub.groups = {}
-	local function GroupHeight(group) return 16 + 20 * #group.items + 6 end
-	local total = 0
-	for _, group in ipairs(SETTINGS) do total = total + GroupHeight(group) end
 	local colW = (HW - 2 * PAD) / 2
-	local top2, x, used, lowest = y, PAD, 0, y
-	for _, group in ipairs(SETTINGS) do
-		local h = GroupHeight(group)
-		if x == PAD and used > 0 and used + h / 2 > total / 2 then
-			x, y = PAD + colW, top2
+	local function GroupHeight(group) return 18 + 20 * #group.items + 8 end
+	local function Groups(pg, key, startY)
+		local list, total = {}, 0
+		for _, group in ipairs(SETTINGS) do
+			if group.tab == key then
+				table.insert(list, group)
+				total = total + GroupHeight(group)
+			end
 		end
-		used = used + h
-		local row = { group = group, boxes = {} }
-		row.header = Text(hub, "GameFontNormalSmall", "TOPLEFT", x, y)
-		y = y - 16
-		for _, item in ipairs(group.items) do
-			local cb = CreateFrame("CheckButton", nil, hub, "UICheckButtonTemplate")
-			cb:SetSize(22, 22)
-			cb:SetPoint("TOPLEFT", x + 4, y + 3)
-			cb.item = item
-			cb.label = Text(hub, "GameFontHighlightSmall", "LEFT", cb, "RIGHT", 2, 1)
-			cb.label:SetText(item.label)
-			cb:SetScript("OnClick", function(self)
-				SetSetting(group, item, self:GetChecked() and true or false)
-				RefreshHub()
-			end)
-			table.insert(row.boxes, cb)
-			y = y - 20
+		local gy, x, used, low = startY, PAD, 0, startY
+		for _, group in ipairs(list) do
+			local h = GroupHeight(group)
+			if x == PAD and used > 0 and used + h / 2 > total / 2 then
+				x, gy = PAD + colW, startY
+			end
+			used = used + h
+			local row = { group = group, boxes = {} }
+			row.header = Text(pg, "GameFontNormalSmall", "TOPLEFT", x, gy)
+			local rule = pg:CreateTexture(nil, "ARTWORK")
+			SetColor(rule, 1, 0.82, 0, 0.15)
+			rule:SetHeight(1)
+			rule:SetPoint("TOPLEFT", x, gy - 13)
+			rule:SetWidth(colW - 16)
+			gy = gy - 18
+			for _, item in ipairs(group.items) do
+				local cb = CreateFrame("CheckButton", nil, pg, "UICheckButtonTemplate")
+				cb:SetSize(22, 22)
+				cb:SetPoint("TOPLEFT", x + 4, gy + 3)
+				cb.item = item
+				cb.label = Text(pg, "GameFontHighlightSmall", "LEFT", cb, "RIGHT", 2, 1)
+				cb.label:SetText(item.label)
+				if item.swatch then
+					local sw = CreateFrame("Button", nil, pg)
+					sw:SetSize(14, 14)
+					sw:SetPoint("LEFT", cb.label, "RIGHT", 6, 0)
+					local border = sw:CreateTexture(nil, "BACKGROUND")
+					border:SetAllPoints()
+					SetColor(border, 0.8, 0.8, 0.8, 1)
+					sw.color = sw:CreateTexture(nil, "ARTWORK")
+					sw.color:SetPoint("TOPLEFT", 1, -1)
+					sw.color:SetPoint("BOTTOMRIGHT", -1, 1)
+					sw:SetScript("OnClick", function()
+						RunSlash(item.swatch.slash[1], item.swatch.slash[2], group.title)
+					end)
+					cb.swatch = sw
+				end
+				cb:SetScript("OnClick", function(self)
+					SetSetting(group, item, self:GetChecked() and true or false)
+					RefreshHub()
+				end)
+				table.insert(row.boxes, cb)
+				gy = gy - 20
+			end
+			gy = gy - 8
+			low = math.min(low, gy)
+			table.insert(hub.groups, row)
 		end
-		y = y - 6
-		lowest = math.min(lowest, y)
-		table.insert(hub.groups, row)
+		return low
 	end
+	for _, tab in ipairs(TABS) do
+		if tab.key ~= "windows" then
+			lowest = math.min(lowest, Groups(hub.pages[tab.key], tab.key, tab.key == "game" and gameTop or first))
+		end
+	end
+	-- One height for every tab, so the window doesn't jump when switching.
 	hub:SetHeight(-lowest + (classic and 28 or 8))
+	ShowTab(db.hubTab or TABS[1].key)
 
 	-- Slash commands can change a setting while the window is open.
 	hub:SetScript("OnShow", RefreshHub)

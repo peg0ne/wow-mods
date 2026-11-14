@@ -1,11 +1,20 @@
 -- Eniro: guild members who share their position, as class-colored dots on
 -- the world map. A position on a zone map is also shown on its continent
 -- (and any other map that contains it) by placing the zone's rectangle on
--- the map being viewed. Hover a dot for name, level and zone.
+-- the map being viewed. Hover a dot for name, level and zone. A member
+-- picked in the map search (Search.lua) gets a bigger, pulsing dot for a
+-- few seconds. On OpenMap's stitched map the dots are placed through
+-- OpenMapAPI, so they show anywhere in its view, above its art.
 
 local _, ns = ...
 
 local pins, canvas = {}, nil
+local lit, litUntil = nil, 0
+
+function ns.Highlight(name)
+	lit, litUntil = name, GetTime() + 8
+	ns.RefreshPins()
+end
 
 local function Canvas()
 	if canvas then return canvas end
@@ -25,14 +34,51 @@ local function Place(map, x, y, viewed)
 	return px, py
 end
 
+-- OpenMap's stitched map (its public OpenMapAPI): the canvas shows past
+-- the edges of the map underneath, into its neighbours.
+function ns.Stitched()
+	local api = OpenMapAPI
+	if not api or not api.IsStitched then return false end
+	local ok, on = pcall(api.IsStitched)
+	return ok and on or false
+end
+
+-- Where a shared position falls on the canvas of the map being viewed. On
+-- OpenMap's stitched map that may be past its rectangle (still on screen);
+-- otherwise only inside it.
+local function Spot(p, viewed)
+	if ns.Stitched() and OpenMapAPI.WorldFromMap and OpenMapAPI.MapFromWorld then
+		local ok, u, v = pcall(OpenMapAPI.WorldFromMap, p.map, p.x, p.y)
+		if ok and u then
+			local ok2, px, py = pcall(OpenMapAPI.MapFromWorld, viewed, u, v)
+			if ok2 and px and px > -3 and px < 4 and py > -3 and py < 4 then return px, py end
+		end
+	end
+	return Place(p.map, p.x, p.y, viewed)
+end
+
+-- The canvas level a dot needs: over OpenMap's art when it has some.
+local function PinLevel(c)
+	local level = c:GetFrameLevel() + 500
+	local art = OpenMapAPI and OpenMapAPI.ArtTopLevel and OpenMapAPI.ArtTopLevel()
+	if type(art) == "number" and art + 5 > level then level = art + 5 end
+	return level
+end
+
 local function Pin(i)
 	local pin = pins[i]
 	if pin then return pin end
 	pin = CreateFrame("Frame", nil, Canvas())
 	pin:SetSize(16, 16)
-	pin:SetFrameLevel(Canvas():GetFrameLevel() + 500)
+	pin:SetFrameLevel(PinLevel(Canvas()))
 	pin.icon = pin:CreateTexture(nil, "OVERLAY")
 	pin.icon:SetAllPoints()
+	pin.pulse = pin:CreateAnimationGroup()
+	pin.pulse:SetLooping("BOUNCE")
+	local fade = pin.pulse:CreateAnimation("Alpha")
+	fade:SetFromAlpha(1)
+	fade:SetToAlpha(0.3)
+	fade:SetDuration(0.4)
 	pin.icon:SetTexture("Interface\\WorldMap\\WorldMapPartyIcon")
 	pin:EnableMouse(true)
 	pin:SetScript("OnEnter", function(self)
@@ -65,14 +111,23 @@ function ns.RefreshPins()
 	local n = 0
 	if viewed and w and w > 0 then
 		for name, p in pairs(ns.positions) do
-			local px, py = Place(p.map, p.x, p.y, viewed)
+			local px, py = Spot(p, viewed)
 			if px then
 				n = n + 1
 				local pin = Pin(n)
 				local m = ns.members[name] or { name = name }
 				pin.member = m
 				-- Same size on screen however far the map is zoomed.
-				pin:SetSize(16 / scale, 16 / scale)
+				local size = (name == lit and GetTime() < litUntil) and 30 or 16
+				pin:SetSize(size / scale, size / scale)
+				-- (restricted on the map in combat, OpenMap found: waits until it ends)
+				local level = PinLevel(c) + (size > 16 and 1 or 0)
+				if pin:GetFrameLevel() ~= level and not InCombatLockdown() then pin:SetFrameLevel(level) end
+				if size > 16 then
+					if not pin.pulse:IsPlaying() then pin.pulse:Play() end
+				elseif pin.pulse:IsPlaying() then
+					pin.pulse:Stop()
+				end
 				pin:ClearAllPoints()
 				pin:SetPoint("CENTER", c, "TOPLEFT", px * w, -py * h)
 				local color = m.classFile and RAID_CLASS_COLORS and RAID_CLASS_COLORS[m.classFile]

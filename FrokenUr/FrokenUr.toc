@@ -1,0 +1,8 @@
+## Interface: 16001
+## Title: Fröken Ur
+## Category: Combat
+## IconTexture: Interface\Icons\INV_Misc_PocketWatch_01
+## Notes: The time left on every cooldown, written on the button in seconds with one decimal (2.9), minutes over a minute. /ur to switch it on or off.
+## Version: 0.1
+## SavedVariables: FrokenUrDB
+Core.lua
