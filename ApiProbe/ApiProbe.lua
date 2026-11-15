@@ -158,6 +158,13 @@ local function Probe()
 				local okValue, value = pcall(GetCVar, name)
 				result.nameCvars[name] = okValue and value ~= nil and tostring(value) or "(no value)"
 			end
+			-- The raid marker over your head (2026-11-14): anything that might size it.
+			local lower = type(name) == "string" and name:lower() or ""
+			if lower:find("raid") or lower:find("marker") or lower:find("icon") or lower:find("scale") or lower:find("target") then
+				result.markerCvars = result.markerCvars or {}
+				local okValue, value = pcall(GetCVar, name)
+				result.markerCvars[name] = okValue and value ~= nil and tostring(value) or "(no value)"
+			end
 		end
 	end
 	-- No list on this client (2026-11-14): try names from several game
@@ -302,8 +309,64 @@ tf:SetScript("OnEvent", function(_, event)
 	end)
 end)
 
+-- /probe namn (2026-11-14): every text in the UI showing your name, to find
+-- what draws the name over your head. Also saved in ApiProbeDB.nameScan.
+local function FrameLabel(frame)
+	local parts = {}
+	while frame and #parts < 6 do
+		local ok, name = pcall(frame.GetName, frame)
+		-- Some frames' GetName is their own and returns a FontString (the
+		-- damage meter's bars); only a real name is a name.
+		if not ok or (issecretvalue and issecretvalue(name)) or type(name) ~= "string" then name = nil end
+		local okType, kind = pcall(frame.GetObjectType, frame)
+		if not okType or type(kind) ~= "string" then kind = "?" end
+		table.insert(parts, 1, name or ("(" .. kind .. ")"))
+		local okParent, parent = pcall(frame.GetParent, frame)
+		frame = okParent and parent or nil
+	end
+	return table.concat(parts, " > ")
+end
+
+local function NameScan()
+	local me = UnitName("player")
+	local hits, frames = {}, 0
+	local function Check(region)
+		local okType, kind = pcall(region.GetObjectType, region)
+		if not okType or (kind ~= "FontString" and kind ~= "EditBox" and kind ~= "Button") then return end
+		if not region.GetText then return end
+		local ok, text = pcall(region.GetText, region)
+		if not ok or type(text) ~= "string" or (issecretvalue and issecretvalue(text)) then return end
+		if text:find(me, 1, true) then
+			local okShown, shown = pcall(region.IsVisible, region)
+			table.insert(hits, string.format("%s: \"%s\"%s", FrameLabel(region), text,
+				okShown and shown and "" or " (dold)"))
+		end
+	end
+	local frame = EnumerateFrames()
+	while frame do
+		frames = frames + 1
+		if not (frame.IsForbidden and frame:IsForbidden()) then
+			Check(frame)
+			local ok, regions = pcall(function() return { frame:GetRegions() } end)
+			if ok then for _, region in ipairs(regions) do Check(region) end end
+		end
+		frame = EnumerateFrames(frame)
+	end
+	local plates = 0
+	if C_NamePlate and C_NamePlate.GetNamePlates then
+		local ok, list = pcall(C_NamePlate.GetNamePlates)
+		if ok and type(list) == "table" then plates = #list end
+	end
+	ApiProbeDB = ApiProbeDB or {}
+	ApiProbeDB.nameScan = { name = me, frames = frames, plates = plates, hits = hits }
+	local out = DEFAULT_CHAT_FRAME
+	out:AddMessage(string.format("|cffaaaaaaApiProbe:|r %d ramar, %d namnskyltar, %d texter med \"%s\":", frames, plates, #hits, me))
+	for _, hit in ipairs(hits) do out:AddMessage("  " .. hit) end
+end
+
 SLASH_APIPROBE1 = "/probe"
-SlashCmdList.APIPROBE = function()
+SlashCmdList.APIPROBE = function(msg)
+	if strtrim(msg or ""):lower() == "namn" then NameScan() return end
 	local r = Probe()
 	DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffaaaaaaApiProbe:|r %s build %s (toc %s). %d missing: %s",
 		tostring(r.build.version), tostring(r.build.build), tostring(r.build.toc), #r.missing, table.concat(r.missing, ", ")))

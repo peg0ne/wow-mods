@@ -20,6 +20,8 @@ globals = {
 	"SLASH_POLISEN1", "SLASH_POLISEN2", "SLASH_POSTNORD1", "SLASH_QUESTLOGSORT1", "SLASH_QUESTLOGSORT2", "QuestLogSortDB", "QuestLogSortCharDB",
 	"SLASH_SCB1", "SLASH_SCB2", "SLASH_SKOLVERKET1", "SLASH_SKOLVERKET2", "SkolverketCharDB",
 	"SkolverketDB", "SlashCmdList",
+	-- Opening the color picker sets its fields (Bolagsverket).
+	"ColorPickerFrame",
 }
 
 -- Game API and UI globals the addons read. Some are only fallbacks for older
@@ -27,7 +29,7 @@ globals = {
 read_globals = {
 	"GetServerTime", "GossipFrame", "InCombatLockdown", "QuestFrame",
 	"AcceptQuest", "Ambiguate", "BackdropTemplateMixin", "BokforingFrame",
-	"COMBATLOG_OBJECT_REACTION_HOSTILE", "COMBATLOG_OBJECT_TYPE_GUARDIAN", "ColorPickerFrame", "CompactUnitFrame_UpdateName", "PartyFrame", "UnitInParty", "UnitInRaid", "UnitIsInMyGuild", "UnitIsUnit",
+	"COMBATLOG_OBJECT_REACTION_HOSTILE", "COMBATLOG_OBJECT_TYPE_GUARDIAN", "CompactUnitFrame_UpdateName", "PartyFrame", "UnitInParty", "UnitInRaid", "UnitIsInMyGuild", "UnitIsUnit",
 	"COMBATLOG_OBJECT_TYPE_PET", "COMBATLOG_OBJECT_TYPE_PLAYER", "COMBATLOG_XPGAIN_FIRSTPERSON",
 	"C_AddOns", "C_CVar", "C_ChatInfo", "C_Container", "C_DeathRecap", "C_EventUtils", "C_GossipInfo",
 	"C_GuildInfo", "C_Item", "C_Map", "C_Minimap", "C_Console", "ConsoleGetAllCommands", "C_NamePlate", "UnitCanAttack", "C_PartyInfo", "C_QuestLog", "C_Spell",
@@ -57,9 +59,9 @@ read_globals = {
 	"SOUNDKIT", "SelectActiveQuest", "SelectAvailableQuest", "SendAddonMessage", "SendChatMessage",
 	"SetCVar", "SetTracking", "ShoppingTooltip1", "ShoppingTooltip2", "SkatteverketCharDB",
 	"SkatteverketAPI", "SkatteverketDB", "SwedbankCharDB", "TooltipDataProcessor", "UIParent", "UISpecialFrames",
-	"UnitClass", "UnitCreatureFamily", "UnitExists", "UnitFactionGroup", "UnitGUID",
+	"UnitClass", "UnitCreatureFamily", "UnitPlayerControlled", "C_TooltipInfo", "IsInRaid", "UnitExists", "UnitFactionGroup", "UnitGUID",
 	"UnitIsDeadOrGhost", "UnitIsFriend", "UnitIsPlayer", "UnitLevel", "UnitName", "UnitRace",
 	"UseContainerItem", "WorldMapFrame", "bit", "date", "format", "geterrorhandler", "hooksecurefunc",
-	"issecretvalue", "strsplit", "strtrim", "time", "tinsert", "wipe",
+	"EnumerateFrames", "issecretvalue", "strsplit", "strtrim", "time", "tinsert", "wipe",
 }
 

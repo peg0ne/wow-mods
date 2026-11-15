@@ -76,12 +76,30 @@ local function GroupUnit(frame)
 	end
 end
 
--- A friendly player's nameplate, with namnskyltar on.
+-- A player of the other faction (Alliance, for a Horde character).
+local function OtherFaction(unit)
+	local mine = Known(UnitFactionGroup("player"))
+	local ok, theirs = pcall(UnitFactionGroup, unit)
+	theirs = ok and Known(theirs)
+	return type(mine) == "string" and type(theirs) == "string" and theirs ~= mine and theirs ~= "Neutral"
+end
+
+-- A player's pet (or another creature a player controls), not a player.
+local function IsPet(unit)
+	if Known(UnitIsPlayer(unit)) ~= false then return false end
+	local ok, controlled = pcall(UnitPlayerControlled, unit)
+	return ok and Known(controlled) == true
+end
+
+-- A player's (or a player's pet's) nameplate, with namnskyltar on: a
+-- friendly one, or the other faction's whether they can be attacked or not
+-- (always red, 0.5).
 local function PlateUnit(frame)
 	if not db or not db.plates then return end
 	local unit = Known(frame.unit) or Known(frame.displayedUnit)
 	if type(unit) ~= "string" or not unit:match("^nameplate%d+$") then return end
-	if Known(UnitIsPlayer(unit)) ~= true then return end
+	if Known(UnitIsPlayer(unit)) ~= true and not IsPet(unit) then return end
+	if OtherFaction(unit) then return unit end
 	local ok, hostile = pcall(UnitCanAttack, "player", unit)
 	if not ok or Known(hostile) ~= false then return end
 	return unit
@@ -127,6 +145,85 @@ local function ClassColor(unit)
 	local _, class = UnitClass(unit)
 	class = Known(class)
 	return class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+end
+
+local ENEMY_RED = { r = 1, g = 0.2, b = 0.2 }
+
+-- Pets (0.5): another player's pet's nameplate is styled as its owner's would be. The owner
+-- is a unit when it is you or in your group, else only a name, read from the
+-- pet's tooltip ("Pelle's Pet") and checked against the guild roster.
+local guildNames = {}     -- short name -> true, from the guild roster
+local petOwnerByGUID = {} -- pet GUID -> owner's short name, once read
+
+local function ShortName(name)
+	if type(name) ~= "string" then return end
+	return (name:match("^([^%-]+)")) or name
+end
+
+local function ReadGuildRoster()
+	if not IsInGuild() or not GetNumGuildMembers then return end
+	wipe(guildNames)
+	for i = 1, GetNumGuildMembers() do
+		local name = ShortName(Known(GetGuildRosterInfo(i)))
+		if name then guildNames[name] = true end
+	end
+end
+
+local function Same(a, b)
+	local ok, same = pcall(UnitIsUnit, a, b)
+	return ok and Known(same) == true
+end
+
+-- "%s's Pet" and the like, made into patterns that catch the owner's name.
+local ownerPatterns
+local function OwnerPatterns()
+	if ownerPatterns then return ownerPatterns end
+	ownerPatterns = {}
+	for _, key in ipairs({ "UNITNAME_TITLE_PET", "UNITNAME_TITLE_MINION", "UNITNAME_TITLE_GUARDIAN",
+		"UNITNAME_TITLE_CHARM", "UNITNAME_TITLE_CREATION", "UNITNAME_TITLE_COMPANION" }) do
+		local title = _G[key]
+		if type(title) == "string" and title:find("%s", 1, true) then
+			local pattern = title:gsub("([%(%)%.%+%-%*%?%[%]%^%$])", "%%%1"):gsub("%%s", "(.+)")
+			table.insert(ownerPatterns, "^" .. pattern .. "$")
+		end
+	end
+	return ownerPatterns
+end
+
+local function OwnerFromTooltip(unit)
+	if not C_TooltipInfo or not C_TooltipInfo.GetUnit then return end
+	local ok, data = pcall(C_TooltipInfo.GetUnit, unit)
+	if not ok or type(data) ~= "table" or type(data.lines) ~= "table" then return end
+	for i = 2, math.min(#data.lines, 4) do
+		local text = Known(data.lines[i].leftText)
+		if type(text) == "string" then
+			for _, pattern in ipairs(OwnerPatterns()) do
+				local owner = text:match(pattern)
+				if owner then return ShortName(owner) end
+			end
+		end
+	end
+end
+
+-- The owner of a pet: a unit ("player", "party2", "raid17") when there is
+-- one, else nil and the owner's name (nil when it can't be told).
+local function PetOwner(unit)
+	if Same(unit, "pet") then return "player" end
+	for i = 1, 4 do
+		if Same(unit, "partypet" .. i) then return "party" .. i end
+	end
+	if IsInRaid and IsInRaid() then
+		for i = 1, 40 do
+			if Same(unit, "raidpet" .. i) then return "raid" .. i end
+		end
+	end
+	local guid = Known(UnitGUID(unit))
+	local name = guid and petOwnerByGUID[guid]
+	if not name then
+		name = OwnerFromTooltip(unit)
+		if name and guid then petOwnerByGUID[guid] = name end
+	end
+	return nil, name
 end
 
 -- In your party or raid (for a nameplate's unit).
@@ -195,18 +292,39 @@ local function Apply(fs)
 	local unit, plate = Unit(t.frame)
 	local exists = unit and UnitExists(unit)
 	local base = t.base
-	local guildmate = exists and not IsMe(unit) and InMyGuild(unit)
+	-- Another player's pet takes its owner's styling: its color, and the
+	-- bolt for a guildmate's pet. Its owner's unit stands in for it below;
+	-- ownerName when there is none. Your own pet keeps the game's look.
+	local who, ownerName, pet = unit, nil, false
+	if exists and plate and IsPet(unit) then
+		pet = true
+		who, ownerName = PetOwner(unit)
+		if who == "player" then who = nil end
+	end
+	local guildmate
+	if pet then
+		if who then
+			guildmate = UnitExists(who) and InMyGuild(who)
+		else
+			guildmate = ownerName ~= nil and guildNames[ownerName] == true
+		end
+	else
+		guildmate = exists and not IsMe(unit) and InMyGuild(unit)
+	end
 
 	-- Guildmates take the guild color wherever they are; your group (and
 	-- guildmates, with the guild color off) the party color or class color,
 	-- as on the party frames. On nameplates everyone else keeps the game's
 	-- own color (0.4.1: they had their class color, which was unwanted).
+	-- The other faction is always red on nameplates, whatever else is set.
 	local c
-	if exists and db.color then
+	if exists and plate and OtherFaction(unit) then
+		c = ENEMY_RED
+	elseif exists and db.color then
 		if guildmate and db.guildCustom then
 			c = db.guildColor
-		elseif guildmate or not plate or InGroup(unit) then
-			c = db.custom and db.partyColor or ClassColor(unit)
+		elseif guildmate or not plate or (who and (IsMe(who) or InGroup(who))) then
+			c = db.custom and db.partyColor or (who and ClassColor(who))
 		end
 	end
 	if c then
@@ -222,7 +340,7 @@ local function Apply(fs)
 		t.icon:Hide()
 	end
 
-	if exists and plate then
+	if exists and plate and not pet then
 		GuildLine(t, fs, unit, guildmate)
 	elseif t.guild then
 		t.guild:Hide()
@@ -365,6 +483,10 @@ local PLATE_SETTINGS = {
 	{ value = "1", label = "vänliga spelares namnskyltar", needed = true,
 		names = { "nameplateShowFriendlyPlayers", "nameplateShowFriends" } },
 	{ value = "0", names = { "nameplateShowFriendlyNpcs", "nameplateShowFriendlyNPCs" } },
+	-- Friendly players' pets, styled as their owners (0.5). The client keeps
+	-- pets and minions (a warlock's demon, for one) apart; both are pets here.
+	{ value = "1", names = { "nameplateShowFriendlyPlayerPets" } },
+	{ value = "1", names = { "nameplateShowFriendlyPlayerMinions" } },
 	{ value = "1", label = "bara namn på namnskyltarna",
 		names = { "nameplateShowOnlyNameForFriendlyPlayerUnits", "nameplateShowOnlyNames" } },
 	-- Past this the nameplate goes and the game's own floating name (other
@@ -496,6 +618,7 @@ frame:RegisterEvent("GUILD_ROSTER_UPDATE")
 frame:RegisterEvent("UNIT_NAME_UPDATE")
 frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+frame:RegisterEvent("UNIT_PET")
 frame:SetScript("OnEvent", function(_, event, arg1)
 	if event == "NAME_PLATE_UNIT_ADDED" then
 		if type(arg1) == "string" then PlateAdded(arg1) end
@@ -527,7 +650,11 @@ frame:SetScript("OnEvent", function(_, event, arg1)
 		if db.plates then ApplyPlateSettings() end
 		FindPartyFrames()
 	elseif event == "PLAYER_ENTERING_WORLD" then
+		ReadGuildRoster()
 		FindPartyFrames()
+	elseif event == "GUILD_ROSTER_UPDATE" or event == "PLAYER_GUILD_UPDATE" then
+		ReadGuildRoster()
+		Refresh()
 	else
 		Refresh()
 	end
