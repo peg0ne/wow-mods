@@ -30,6 +30,9 @@
 -- SkatteverketAPI when it has them, and its pages without a command
 -- (Arbetsorder, Folkvald, Socialbidrag, Kontakta oss) get buttons.
 --
+-- 2.15 shows a summary of the day at the account's first login of the day
+-- (/gpanel idag, off with /gpanel dagens).
+--
 -- 2.3 follows Skatteverket 0.28: standing is counted in play time on the
 -- whole account (8 h unpaid neutral, 12 h negative), and the best character
 -- on the account counts for all of them.
@@ -966,6 +969,7 @@ local SETTINGS = {
 		{ key = "warn", label = "Förvarna innan skatteställningen sjunker", default = true },
 		{ key = "celebrate", label = "Fira när du betalar skatt", default = true },
 		{ key = "celebrateQuiet", label = "Med ljud", invert = true },
+		{ key = "daily", label = "Dagens sammanfattning vid första inloggningen", default = true },
 		{ key = "compact", label = "Kompakt rad tills musen är över", default = true, slash = { "GILDEPANEL", "kompakt" } },
 		{ key = "hideMinimap", label = "Visa minimapknappen", invert = true, default = true, slash = { "GILDEPANEL", "minimap" } },
 		{ key = "locked", label = "Lås panelens plats" },
@@ -1269,7 +1273,7 @@ local function BuildHub()
 	ShowTab(db.hubTab or TABS[1].key)
 
 	-- Slash commands can change a setting while the window is open.
-	hub:SetScript("OnShow", RefreshHub)
+	hub:HookScript("OnShow", RefreshHub)
 	hub:SetScript("OnUpdate", function(self, elapsed)
 		self.elapsed = (self.elapsed or 0) + elapsed
 		if self.elapsed >= 1 then
@@ -1623,6 +1627,244 @@ local function RestoreTracking()
 end
 
 ------------------------------------------------------------------------
+-- Dagens sammanfattning (2.15): on the account's first login of the day, a
+-- window with your tax, your loans, the guild's news since the last one
+-- (who joined, left or levelled, obituaries, police reports) and your
+-- profession cooldowns. /gpanel idag shows it again; /gpanel dagens turns
+-- it off (db.daily = false). Each one saves a roster snapshot (name ->
+-- level) in db.dailyLast for the next; db.dailyPrev is the one today's was
+-- compared with, so showing it again later in the day gives the same news,
+-- brought up to date.
+
+local WEEKDAYS = { "söndag", "måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag" }
+local MONTHS = { "januari", "februari", "mars", "april", "maj", "juni", "juli",
+	"augusti", "september", "oktober", "november", "december" }
+local DAILY_W, DAILY_LIST = 400, 6
+local daily
+
+local function Today()
+	return date("%Y-%m-%d")
+end
+
+-- name -> level for everyone in the guild, or nil before the roster loads.
+local function RosterLevels()
+	if not IsInGuild() then return nil end
+	local n = GetNumGuildMembers()
+	if not n or n == 0 then return nil end
+	local levels = {}
+	for i = 1, n do
+		local name, _, _, level = GetGuildRosterInfo(i)
+		name = Short(name)
+		if name then levels[name] = tonumber(level) or 0 end
+	end
+	return levels
+end
+
+-- "Anna, Bertil och 3 till"
+local function NameList(list)
+	table.sort(list)
+	local shown = {}
+	for i = 1, math.min(#list, DAILY_LIST) do shown[i] = list[i] end
+	local text = table.concat(shown, ", ")
+	if #list > DAILY_LIST then text = text .. format(" och %d till", #list - DAILY_LIST) end
+	return text
+end
+
+local function DailyTax(add)
+	if not SkatteverketCharDB then return end
+	local s = TaxState()
+	if not s.ok then
+		add("|cffffd100Skatt:|r " .. s.note)
+		return
+	end
+	local owed = s.owed >= 1 and (" · skyldig " .. Money(s.owed)) or ""
+	add("|cffffd100Skatt:|r " .. LABELS[s.standing] .. owed)
+	add("   " .. s.note)
+end
+
+local function DailyLoans(add)
+	local c = SwedbankCharDB
+	if not c then return end
+	local total, active, offers, late, soonest = 0, 0, 0, 0, nil
+	for _, loan in pairs(c.loans or {}) do
+		if loan.status == "approved" then
+			active = active + 1
+			total = total + DueNow(loan)
+			local by = loan.repayBy or 0
+			if by > 0 then
+				if time() > by then late = late + 1 end
+				if not soonest or by < soonest then soonest = by end
+			end
+		elseif loan.status == "offered" then
+			offers = offers + 1
+		end
+	end
+	if active == 0 and offers == 0 then return end
+	local parts = {}
+	if active > 0 then
+		table.insert(parts, format("%d lån, att betala %s", active, Money(total)))
+		if soonest then table.insert(parts, "senast " .. Day(soonest)) end
+	end
+	if late > 0 then table.insert(parts, format("|cffff4040%d försenat|r", late)) end
+	if offers > 0 then table.insert(parts, format("|cffffd100%d erbjudande att svara på|r", offers)) end
+	add("|cffffd100Swedbank:|r " .. table.concat(parts, " · "))
+end
+
+local function DailyGuild(add, levels, prev)
+	if not IsInGuild() then return end
+	local total, online = GetNumGuildMembers()
+	add(format("|cffffd100Gillet:|r %d av %d inloggade", online or 0, total or 0))
+	local motd = GetGuildRosterMOTD and GetGuildRosterMOTD() or ""
+	if motd ~= "" then add("   |cff40c0ff" .. motd .. "|r") end
+	if not (prev and prev.levels and levels and prev.guild == GetGuildInfo("player")) then return end
+	local joined, left, ups = {}, {}, {}
+	for name, level in pairs(levels) do
+		local was = prev.levels[name]
+		if not was then
+			table.insert(joined, name)
+		elseif level > was and was > 0 then
+			table.insert(ups, format("%s %d→%d", name, was, level))
+		end
+	end
+	for name in pairs(prev.levels) do
+		if not levels[name] then table.insert(left, name) end
+	end
+	if #joined > 0 then add("   |cff40ff40Nya:|r " .. NameList(joined)) end
+	if #left > 0 then add("   |cff808080Har lämnat:|r " .. NameList(left)) end
+	if #ups > 0 then add("   |cffffd100Nya nivåer:|r " .. NameList(ups)) end
+end
+
+-- The newest notices since `since`, at most three, newest first.
+local function Newest(list, since)
+	local hits = {}
+	for _, item in pairs(list) do
+		if type(item) == "table" and (item.time or 0) > since then table.insert(hits, item) end
+	end
+	table.sort(hits, function(a, b) return (a.time or 0) > (b.time or 0) end)
+	return hits
+end
+
+local function DailyNews(add, prev)
+	if not (prev and prev.at) then return end
+	local d = DodsannonserDB
+	if type(d) == "table" and type(d.recent) == "table" then
+		local hits = Newest(d.recent, prev.at)
+		if #hits > 0 then
+			add(format("|cffd8d8d8Dödsannonser:|r %d sedan sist", #hits))
+			for i = 1, math.min(#hits, 3) do add("   |cffd8d8d8" .. tostring(hits[i].text or "") .. "|r") end
+		end
+	end
+	local p = PolisenDB
+	if type(p) == "table" and type(p.incidents) == "table" then
+		local hits = Newest(p.incidents, prev.at)
+		if #hits > 0 then
+			add(format("|cff4080ffPolisen:|r %d %s", #hits, #hits == 1 and "ny anmälning" or "nya anmälningar"))
+			for i = 1, math.min(#hits, 3) do
+				local inc = hits[i]
+				local zone = (inc.zone and inc.zone ~= "") and (" i " .. inc.zone) or ""
+				add(format("   %s dödades av %s%s", tostring(inc.victim or "?"), tostring(inc.suspect or "?"), zone))
+			end
+		end
+	end
+end
+
+-- Your own profession cooldowns, as Skolverket saw them last.
+local function DailyCooldowns(add)
+	local c, names = SkolverketCharDB, SkolverketDB and SkolverketDB.names or {}
+	if type(c) ~= "table" or type(c.cds) ~= "table" then return end
+	local ready, nextAt, nextName, now = {}, nil, nil, time()
+	for _, p in pairs(c.cds) do
+		for key, at in pairs(type(p) == "table" and p.keys or {}) do
+			local name = names[key]
+			if not name and C_Spell and C_Spell.GetSpellName and key:sub(1, 1) ~= "i" then
+				name = C_Spell.GetSpellName(tonumber(key:sub(2)) or 0)
+			end
+			name = name or key
+			if at <= now then
+				ready[name] = true
+			elseif not nextAt or at < nextAt then
+				nextAt, nextName = at, name
+			end
+		end
+	end
+	local list = {}
+	for name in pairs(ready) do table.insert(list, name) end
+	if #list > 0 then
+		add("|cff40ff40Redo att tillverka:|r " .. NameList(list))
+	elseif nextAt then
+		add(format("|cffffd100Nedkylning:|r %s om %s", nextName, Duration(nextAt - now)))
+	end
+end
+
+local function DailyText(prev)
+	local lines = {}
+	local function add(text) table.insert(lines, text) end
+	local t = date("*t")
+	local hello = t.hour < 10 and "God morgon" or t.hour < 18 and "God dag" or "God kväll"
+	add(format("|cffffffff%s, %s!|r  Det är %s %d %s.", hello, UnitName("player") or "",
+		WEEKDAYS[t.wday], t.day, MONTHS[t.month]))
+	add(" ")
+	local start = #lines
+	DailyTax(add)
+	DailyLoans(add)
+	DailyCooldowns(add)
+	if #lines > start then add(" ") end
+	local levels = RosterLevels()
+	DailyGuild(add, levels, prev)
+	DailyNews(add, prev)
+	if not (prev and prev.at) then
+		add(" ")
+		add("|cff808080Första sammanfattningen: från i morgon syns vad som hänt i gillet sedan sist.|r")
+	elseif prev.day then
+		add(" ")
+		add("|cff808080Nyheterna gäller sedan " .. Day(prev.at) .. date(" %H:%M", prev.at) .. ".|r")
+	end
+	return table.concat(lines, "\n"), levels
+end
+
+local function ShowDaily(prev)
+	if not daily then
+		daily = Statskontoret.Window("GildepanelDaily", "Dagens sammanfattning", DAILY_W, 200)
+		daily.text = daily:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+		daily.text:SetPoint("TOPLEFT", 24, -36)
+		daily.text:SetWidth(DAILY_W - 48)
+		daily.text:SetJustifyH("LEFT")
+		daily.text:SetJustifyV("TOP")
+		daily.text:SetSpacing(3)
+		daily.ok = CreateFrame("Button", nil, daily, "UIPanelButtonTemplate")
+		daily.ok:SetSize(90, 22)
+		daily.ok:SetPoint("BOTTOMRIGHT", -14, 8)
+		daily.ok:SetText("Stäng")
+		daily.ok:SetScript("OnClick", function() daily:Hide() end)
+	end
+	local text, levels = DailyText(prev)
+	daily.text:SetText(text)
+	daily:SetHeight(math.max(160, daily.text:GetStringHeight() + 84))
+	daily:Show()
+	return levels
+end
+
+-- At login: once a day, after the roster has had time to load.
+local function MaybeDaily(tries)
+	if db.daily == false or db.dailyDay == Today() then return end
+	if IsInGuild() and not RosterLevels() and tries < 6 then
+		if C_GuildInfo and C_GuildInfo.GuildRoster then C_GuildInfo.GuildRoster() end
+		C_Timer.After(3, function() MaybeDaily(tries + 1) end)
+		return
+	end
+	if InCombatLockdown and InCombatLockdown() then
+		C_Timer.After(5, function() MaybeDaily(tries) end)
+		return
+	end
+	local last = db.dailyLast
+	local levels = ShowDaily(last)
+	db.dailyDay = Today()
+	db.dailyPrev = last
+	db.dailyLast = levels and { day = Today(), at = time(), guild = GetGuildInfo("player"), levels = levels }
+		or { day = Today(), at = time(), guild = last and last.guild, levels = last and last.levels }
+end
+
+------------------------------------------------------------------------
 
 local events = CreateFrame("Frame")
 for _, event in ipairs({
@@ -1657,6 +1899,7 @@ events:SetScript("OnEvent", function(_, event, arg)
 		C_Timer.NewTicker(5, function() RefreshMini() end)
 		C_Timer.NewTicker(60, CheckWarning)
 		C_Timer.After(25, CheckWarning)
+		C_Timer.After(8, function() MaybeDaily(0) end)
 		Snapshot()
 		C_Timer.NewTicker(1, function() if not checking then Snapshot() end end)
 		return
@@ -1764,10 +2007,17 @@ SlashCmdList.GILDEPANEL = function(msg)
 		if db.keepTracking then SaveTracking() end
 		Print(db.keepTracking and "spårningen (örter, malm ...) slås på igen när du loggar in." or "spårningen lämnas som spelet sätter den vid inloggning.")
 		if hub and hub:IsShown() then RefreshHub() end
+	elseif cmd == "idag" or cmd == "today" then
+		-- Today's news again, or a preview before today's has been shown.
+		ShowDaily(db.dailyDay == Today() and db.dailyPrev or db.dailyLast)
+	elseif cmd == "dagens" or cmd == "daily" then
+		db.daily = db.daily == false
+		Print(db.daily and "visar dagens sammanfattning vid dagens första inloggning (/gpanel idag visar den nu)." or "ingen sammanfattning vid inloggning; /gpanel idag visar den ändå.")
+		if hub and hub:IsShown() then RefreshHub() end
 	elseif cmd == "varning" or cmd == "warn" then
 		db.warn = db.warn == false
 		Print(db.warn and "varnar en timme speltid innan ställningen sjunker." or "inga förvarningar.")
 	else
-		Print("/gpanel visar panelen. /gpanel addons, /gpanel kompakt, /gpanel lås, /gpanel minimap, /gpanel kamera 2.6, /gpanel skala 0.9, /gpanel återställ, /gpanel varning, /gpanel spårning.")
+		Print("/gpanel visar panelen. /gpanel addons, /gpanel kompakt, /gpanel lås, /gpanel minimap, /gpanel kamera 2.6, /gpanel skala 0.9, /gpanel återställ, /gpanel varning, /gpanel spårning, /gpanel idag, /gpanel dagens.")
 	end
 end
