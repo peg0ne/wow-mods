@@ -30,6 +30,9 @@
 -- SkatteverketAPI when it has them, and its pages without a command
 -- (Arbetsorder, Folkvald, Socialbidrag, Kontakta oss) get buttons.
 --
+-- 2.19.1 celebrates only a payment at the guild bank: opening a shop could
+-- set it off (a repair plus a resync that lowered what you owe).
+--
 -- 2.17 tidies the look: the Addons window's tabs are words instead of red
 -- buttons, Fönster groups its buttons, and the panel's Swedbank part is
 -- only as tall as its loans.
@@ -1394,9 +1397,12 @@ end
 
 ------------------------------------------------------------------------
 -- Firandet: a show on screen and in your speakers when you pay your tax.
--- A payment is spotted from the outside: on PLAYER_MONEY your money went
--- down and SkatteverketCharDB.owed went down with it. A snapshot taken every
--- second (and after each check) is the "before". Paying your way out of
+-- A payment is spotted from the outside: on PLAYER_MONEY, with the guild
+-- bank open, your money went down and SkatteverketCharDB.paid went up with
+-- it. Owed going down is not enough: at a vendor a repair takes gold while
+-- a resync with the leader can lower owed in the same second, which once
+-- set off the show on opening a shop. A snapshot taken every second (and
+-- after each check) is the "before". Paying your way out of
 -- Neutral or Negativ gets the bigger show. /gpanel firande test previews it.
 
 local FONT = "Fonts\\MORPHEUS.TTF"
@@ -1604,7 +1610,7 @@ local function Snapshot()
 	local c = SkatteverketCharDB
 	if not c or not InGuild() then before = nil return end
 	local s = TaxState()
-	before = { owed = c.owed or 0, money = GetMoney(), standing = s.debt and s.standing or "good" }
+	before = { paid = c.paid or 0, money = GetMoney(), standing = s.debt and s.standing or "good" }
 end
 
 local checking = false
@@ -1612,16 +1618,18 @@ local function CheckPayment()
 	if checking then return end
 	checking = true
 	local was = before
+	-- Payments are only made at the guild bank; it may close before the look.
+	local atBank = bankOpen
 	-- Skatteverket books the payment in the same event; look a moment later.
 	C_Timer.After(0.3, function()
 		checking = false
 		local c = SkatteverketCharDB
-		if was and c and InGuild() then
+		if was and c and atBank and InGuild() then
 			local spent = was.money - GetMoney()
-			local cleared = was.owed - (c.owed or 0)
-			if spent >= 1 and cleared >= 1 then
+			local paid = (c.paid or 0) - was.paid
+			if spent >= 1 and paid >= 1 then
 				local s = TaxState()
-				Celebrate(math.max(spent, cleared), was.standing, s.debt and s.standing or "good")
+				Celebrate(paid, was.standing, s.debt and s.standing or "good")
 			end
 		end
 		Snapshot()
