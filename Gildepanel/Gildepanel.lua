@@ -1001,7 +1001,7 @@ local SETTINGS = {
 		{ key = "share", label = "Dela min position med gillet", slash = { "ENIRO", "dela" } },
 	} },
 	{ addon = "Konsumentverket", tab = "game", title = "Konsumentverket", db = "KonsumentverketDB", items = {
-		{ key = "auto", label = "Öppna bredvid yrkesfönstret", default = true },
+		{ key = "auto", label = "Öppna bredvid yrkesfönstret", default = false },
 	} },
 	{ addon = "FrokenUr", tab = "game", title = "Fröken Ur", db = "FrokenUrDB", items = {
 		{ key = "on", label = "Tid på nedkylningarna", default = true, slash = { "FROKENUR", "på", "av" } },

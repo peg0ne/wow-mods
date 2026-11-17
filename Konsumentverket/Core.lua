@@ -14,13 +14,14 @@
 --
 -- Recipes are saved per character and profession, so /konsument works at
 -- the vendor too, without the profession window open. The window also
--- opens beside the profession window (/konsument auto turns that off).
+-- opens beside the profession window if /konsument auto turns that on (off
+-- by default since 0.2.5).
 --
 -- 0.2 adds an equipment search by stats (/konsument sök, Search.lua).
 
 local _, ns = ...
 
-local defaults = { auto = true, skillOnly = true }
+local defaults = { auto = false, skillOnly = true, canUse = true }
 local db
 
 local function Print(text)
@@ -289,6 +290,9 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		db.vendor = db.vendor or {}
 		db.vendorAt = db.vendorAt or {}
 		db.chars = db.chars or {}
+		-- 0.2.5 opens only with /konsument by default. Before, the old default
+		-- (on) was written into the saved settings, so switch it off once.
+		if not db.autoOff then db.auto, db.autoOff = nil, true end
 		for k, v in pairs(defaults) do
 			if db[k] == nil then db[k] = v end
 		end
@@ -329,6 +333,6 @@ SlashCmdList.KONSUMENTVERKET = function(msg)
 	elseif msg == "" then
 		ns.ToggleWindow()
 	else
-		Print("/konsument visar vad dina recept är värda hos en handlare, /konsument sök söker utrustning med den statistik du väljer, bland det dina recept gör och i auktionshuset, /konsument auto slår på eller av att fönstret öppnas bredvid yrkesfönstret (flytta det så öppnas det där nästa gång; /konsument plats glömmer platsen). Öppna yrkesfönstret en gång för att läsa in recepten, och handlare för att lära dig vad de tar för reagenserna.")
+		Print("/konsument visar vad dina recept är värda hos en handlare, /konsument sök söker utrustning med den statistik du väljer, bland det dina recept gör och i auktionshuset, /konsument auto slår på eller av att fönstret öppnas bredvid yrkesfönstret (av från början) (flytta det så öppnas det där nästa gång; /konsument plats glömmer platsen). Öppna yrkesfönstret en gång för att läsa in recepten, och handlare för att lära dig vad de tar för reagenserna.")
 	end
 end

@@ -59,8 +59,27 @@ end
 local TYPES = { { 1, "Cloth" }, { 2, "Leather" }, { 3, "Mail" }, { 4, "Plate" } }
 local ARMOR, WEAPON = 4, 2
 
+-- The armor a class can wear in Classic, by armor subclass: the level it
+-- learns it at (Mail for hunters and shamans and Plate at 40); 6 is shields.
+-- Weapons are not checked.
+local WEAR = {
+	WARRIOR = { [2] = 1, [3] = 1, [4] = 40, [6] = 1 },
+	PALADIN = { [2] = 1, [3] = 1, [4] = 40, [6] = 1 },
+	HUNTER = { [2] = 1, [3] = 40 },
+	SHAMAN = { [2] = 1, [3] = 40, [6] = 1 },
+	ROGUE = { [2] = 1 },
+	DRUID = { [2] = 1 },
+}
+
+local function CanWear(class, sub, level)
+	if class ~= ARMOR or sub == 0 or sub == 1 or sub > 6 then return true end   -- misc, cloth, relics
+	local learnt = WEAR[select(2, UnitClass("player"))] or {}
+	return learnt[sub] ~= nil and level >= learnt[sub]
+end
+
 local frame, rows, list = nil, {}, {}
 local offset, source = 0, "all"
+local pending = false   -- a background search found a different list
 local picked = { stats = {}, slots = {}, types = {} }
 local ahOpen = false
 
@@ -82,6 +101,7 @@ local ItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 -- damage and healing both.
 local function StatIds(key)
 	key = key:upper()
+	if key:find("RESISTANCE0") then return end   -- armor, to the game
 	if key:find("RESISTANCE") then return { "res" } end
 	if key:find("HEAL") then return { "heal" } end
 	if key:find("SPELL_POWER") then return { "sp", "heal" } end
@@ -115,14 +135,27 @@ local LINES = {
 	{ "(%d+) mana per 5 sec", { "mp5" } },
 }
 
-local cache = {}   -- link -> { stat = value } or false while the item loads
+-- link -> { stats = { stat = value }, name, quality, minLevel }, kept once
+-- read: with thousands of auction house items the game lets go of some again,
+-- and a row must not lose its name for that.
+local cache = {}
+-- Item ids asked of the game: once per search of your own (asked[id]), never
+-- again by a background search, so items that never come (some random
+-- enchantments) are not asked for in a loop. loading counts down as
+-- GET_ITEM_INFO_RECEIVED comes.
+local asked, loading, loadingN = {}, {}, 0
 
--- The item's stats by our ids, or nil while the game has not loaded it.
-local function Stats(link, id)
+-- The item, or nil while the game has not loaded it.
+local function Info(link, id)
 	local known = cache[link]
 	if known then return known end
-	if not ItemInfo(link) then
-		if C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(id) end
+	local name, _, quality, _, minLevel = ItemInfo(link)
+	if not name then name, _, quality, _, minLevel = ItemInfo(id) end
+	if not name then
+		if not asked[id] then
+			asked[id], loading[id], loadingN = true, true, loadingN + 1
+			if C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(id) end
+		end
 		return
 	end
 	local out = {}
@@ -145,8 +178,8 @@ local function Stats(link, id)
 			end
 		end
 	end
-	cache[link] = out
-	return out
+	cache[link] = { stats = out, name = name, quality = quality, minLevel = minLevel }
+	return cache[link]
 end
 
 ---------------------------------------------------------------------------
@@ -157,6 +190,17 @@ local scanning, scanItems, scanStarted = false, nil, 0
 local function ItemLink(id, suffix)
 	if suffix and suffix ~= 0 then return string.format("item:%d:0:0:0:0:0:%d", id, suffix) end
 	return "item:" .. id
+end
+
+-- One quiet background search a second at most, however many events come.
+local soon = false
+local function SearchSoon()
+	if soon then return end
+	soon = true
+	C_Timer.After(1, function()
+		soon = false
+		if ns.RefreshSearch then ns.RefreshSearch(true) end
+	end)
 end
 
 local function ReadBrowse()
@@ -185,8 +229,11 @@ local function ReadBrowse()
 		local n = 0
 		for _ in pairs(db.ah.items) do n = n + 1 end
 		ns.Print(string.format("auktionshuset skannat: %d sorters rustning och vapen.", n))
+		offset = 0
+		if ns.RefreshSearch then ns.RefreshSearch() end
+		return
 	end
-	if ns.RefreshSearch then ns.RefreshSearch() end
+	SearchSoon()
 end
 
 function ns.ScanAH()
@@ -222,8 +269,8 @@ for _, event in ipairs({ "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "AUCTION_
 	"AUCTION_HOUSE_BROWSE_RESULTS_ADDED", "GET_ITEM_INFO_RECEIVED" }) do
 	pcall(events.RegisterEvent, events, event)
 end
-local redraw = false
-events:SetScript("OnEvent", function(_, event)
+local lastArrival = 0
+events:SetScript("OnEvent", function(_, event, id)
 	local db = ns.DB()
 	if not db then return end
 	db.ah = db.ah or { items = {} }
@@ -232,18 +279,22 @@ events:SetScript("OnEvent", function(_, event)
 	elseif event == "AUCTION_HOUSE_CLOSED" then
 		ahOpen, scanning, scanItems = false, false, nil
 	elseif event == "GET_ITEM_INFO_RECEIVED" then
-		if redraw or not frame or not frame:IsShown() then return end
-		redraw = true
-		C_Timer.After(0.5, function()
-			redraw = false
-			ns.RefreshSearch()
+		-- Only the footer's count while items come; one search when all
+		-- have, or two seconds after the last (some never come).
+		if not loading[id] then return end
+		loading[id], loadingN = nil, loadingN - 1
+		if loadingN == 0 then SearchSoon() return end
+		if ns.SearchFooter then ns.SearchFooter() end
+		lastArrival = GetTime()
+		C_Timer.After(2, function()
+			if GetTime() - lastArrival >= 1.9 then SearchSoon() end
 		end)
 		return
 	else
 		ReadBrowse()
 		return
 	end
-	if ns.RefreshSearch then ns.RefreshSearch() end
+	SearchSoon()
 end)
 
 ---------------------------------------------------------------------------
@@ -266,7 +317,7 @@ local function Candidates()
 						if e then
 							e.who[ShortName(charKey)] = true
 						else
-							out["r" .. rec.item] = { id = rec.item, link = link, rec = rec, profession = profession,
+							out["r" .. rec.item] = { key = "r" .. rec.item, id = rec.item, link = link, rec = rec, profession = profession,
 								who = { [ShortName(charKey)] = true } }
 						end
 					end
@@ -276,7 +327,7 @@ local function Candidates()
 	end
 	if source ~= "recipes" and db.ah then
 		for k, a in pairs(db.ah.items or {}) do
-			out["a" .. k] = { id = a.id, link = ItemLink(a.id, a.suffix), ah = a }
+			out["a" .. k] = { key = "a" .. k, id = a.id, link = ItemLink(a.id, a.suffix), ah = a }
 		end
 	end
 	return out
@@ -287,53 +338,18 @@ local function Wanted(id)
 	if not loc or not SLOT_OF[loc] then return end
 	if next(picked.slots) and not picked.slots[SLOT_OF[loc]] then return end
 	if next(picked.types) and not (class == ARMOR and picked.types[sub]) then return end
+	if ns.DB().canUse and not CanWear(class, sub, UnitLevel("player")) then return end
 	return SLOT_OF[loc]
 end
 
-function ns.RefreshSearch()
-	if not frame or not frame:IsShown() then return end
-	frame.sources:Select(source)
-	for _, c in ipairs(frame.chips) do c:Paint() end
-	frame.canUse:SetChecked(ns.DB().canUse)
-
-	local myLevel = UnitLevel("player")
-	list = {}
-	local waiting = 0
-	for _, e in pairs(Candidates()) do
-		local slot = Wanted(e.id)
-		if slot then
-			local stats = Stats(e.link, e.id)
-			if not stats then
-				waiting = waiting + 1
-			else
-				local ok, score = true, 0
-				for s in pairs(picked.stats) do
-					if not stats[s] or stats[s] <= 0 then ok = false break end
-					score = score + stats[s]
-				end
-				local minLevel = select(5, ItemInfo(e.link))
-				if ok and ns.DB().canUse and minLevel and minLevel > myLevel then ok = false end
-				if ok then
-					e.slot, e.stats, e.score, e.minLevel = slot, stats, score, minLevel
-					table.insert(list, e)
-				end
-			end
-		end
-	end
-	-- Most of the ticked stats first, then the cheapest.
-	table.sort(list, function(a, b)
-		if a.score ~= b.score then return a.score > b.score end
-		local pa, pb = a.ah and a.ah.price or math.huge, b.ah and b.ah.price or math.huge
-		if pa ~= pb then return pa < pb end
-		return a.link < b.link
-	end)
-
+-- Puts the list's rows on screen from offset, without searching again.
+local function Draw()
 	offset = math.max(0, math.min(offset, #list - ROWS))
 	for i, row in ipairs(rows) do
 		local e = list[i + offset]
 		row.entry = e
 		if e then
-			local name, _, quality = ItemInfo(e.link)
+			local name, quality = e.info.name, e.info.quality
 			local color = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
 			row.cells[1]:SetText((color and color.hex or "|cffffffff") .. (name or ("föremål " .. e.id)) .. "|r")
 			row.cells[2]:SetText(SLOT_NAME[e.slot] or "")
@@ -360,10 +376,71 @@ function ns.RefreshSearch()
 		end
 	end
 	frame.scroll:Update(offset, ROWS, #list)
+end
 
+-- Searches again. Only the player's own actions (a tick, a tab, a scan,
+-- Uppdatera) change the list; a background refresh (an item loaded, auction
+-- house results came in) never moves the rows once the window is full; the
+-- footer says when there is something new.
+function ns.RefreshSearch(background)
+	if not frame or not frame:IsShown() then return end
+	frame.sources:Select(source)
+	for _, c in ipairs(frame.chips) do c:Paint() end
+	frame.canUse:SetChecked(ns.DB().canUse)
+
+	-- Your own search asks again for what never came.
+	if not background then asked, loading, loadingN = {}, {}, 0 end
+	local myLevel = UnitLevel("player")
+	local found = {}
+	for _, e in pairs(Candidates()) do
+		local slot = Wanted(e.id)
+		if slot then
+			local info = Info(e.link, e.id)
+			if info then
+				local stats = info.stats
+				local ok, score = true, 0
+				for s in pairs(picked.stats) do
+					if not stats[s] or stats[s] <= 0 then ok = false break end
+					score = score + stats[s]
+				end
+				local minLevel = info.minLevel
+				if ok and ns.DB().canUse and minLevel and minLevel > myLevel then ok = false end
+				if ok then
+					e.slot, e.stats, e.score, e.minLevel, e.info = slot, stats, score, minLevel, info
+					table.insert(found, e)
+				end
+			end
+		end
+	end
+	-- Most of the ticked stats first, then the cheapest.
+	table.sort(found, function(a, b)
+		if a.score ~= b.score then return a.score > b.score end
+		local pa, pb = a.ah and a.ah.price or math.huge, b.ah and b.ah.price or math.huge
+		if pa ~= pb then return pa < pb end
+		return a.link < b.link
+	end)
+
+	if not background or #list == 0 or (offset == 0 and #list < ROWS) then
+		list, pending = found, false
+	elseif not pending then
+		local same = #found == #list
+		for i = 1, #found do
+			if not same then break end
+			same = found[i].key == list[i].key
+		end
+		pending = not same
+	end
+	Draw()
+	ns.SearchFooter()
+end
+
+-- The line under the list, and the buttons' states.
+function ns.SearchFooter()
+	if not frame or not frame:IsShown() then return end
 	local db = ns.DB()
 	local parts = { string.format("%d träffar.", #list) }
-	if waiting > 0 then table.insert(parts, string.format("Läser in %d föremål ...", waiting)) end
+	if loadingN > 0 then table.insert(parts, string.format("Läser in %d föremål ...", loadingN)) end
+	if pending then table.insert(parts, "|cffffd100Nya träffar: tryck Uppdatera.|r") end
 	if db.ah and db.ah.at then
 		table.insert(parts, "AH skannat " .. date("%d/%m %H:%M", db.ah.at) .. ".")
 	else
@@ -373,13 +450,6 @@ function ns.RefreshSearch()
 	frame.count:SetText(table.concat(parts, " "))
 	if not scanning then frame.scanText:SetText("") end
 	if ahOpen and not scanning then frame.scan:Enable() else frame.scan:Disable() end
-	if waiting > 0 and not frame.retry then
-		frame.retry = true
-		C_Timer.After(1, function()
-			frame.retry = false
-			ns.RefreshSearch()
-		end)
-	end
 end
 
 ---------------------------------------------------------------------------
@@ -437,7 +507,7 @@ end
 
 local function SearchInAH(e)
 	local bar = AuctionHouseFrame and AuctionHouseFrame.SearchBar
-	local name = ItemInfo(e.link)
+	local name = e.info and e.info.name
 	if not bar or not name then return end
 	pcall(function()
 		bar.SearchBox:SetText(name)
@@ -478,7 +548,7 @@ local function Build()
 		offset = 0
 		ns.RefreshSearch()
 	end)
-	Text(frame, "GameFontHighlightSmall", "LEFT", canUse, "RIGHT", 2, 0):SetText("Bara det jag kan bära nu (nivå)")
+	Text(frame, "GameFontHighlightSmall", "LEFT", canUse, "RIGHT", 2, 0):SetText("Bara det jag kan bära nu (nivå, rustning)")
 	frame.canUse = canUse
 
 	local COLS = { { "Föremål", 210 }, { "Plats", 90 }, { "Nivå", 40 }, { "Statistik", 210 }, { "Var", 120 } }
@@ -542,12 +612,17 @@ local function Build()
 		offset = 0
 		ns.RefreshSearch()
 	end)
-	frame.scanText = Text(frame, "GameFontHighlightSmall", "LEFT", clear, "RIGHT", 10, 0)
+	frame.update = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+	frame.update:SetSize(110, 22)
+	frame.update:SetText("Uppdatera")
+	frame.update:SetPoint("LEFT", clear, "RIGHT", 8, 0)
+	frame.update:SetScript("OnClick", function() ns.RefreshSearch() end)
+	frame.scanText = Text(frame, "GameFontHighlightSmall", "LEFT", frame.update, "RIGHT", 10, 0)
 
 	frame:EnableMouseWheel(true)
 	frame:SetScript("OnMouseWheel", function(_, delta)
 		offset = math.max(0, math.min(offset - delta, #list - ROWS))
-		ns.RefreshSearch()
+		Draw()
 	end)
 	frame:Hide()
 end
