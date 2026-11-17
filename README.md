@@ -78,7 +78,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 | Statskontoret | 0.2 | Shared library; 0.2 adds window parts (`Tabs`, `Stripe`, `ScrollMark`, `Rule`, `SortArrow`), used by Polisen, Eniro, SCB 0.4.1 and Gildepanel 2.17; not yet tested in game |
 | Bolagsverket | 0.5 | Works in game, including the nameplates (`/bv namnskyltar`; 0.3.1 uses this client's nameplate setting names). 0.2's own party color and 0.4's guild color not yet tested in game |
 | Revisorsinspektionen | 0.2 | Retired in v1.17.0; 0.2 is an empty copy that switches itself off |
-| Konsumentverket | 0.1.1 | New (2026-11-17); 0.1.1 prices reagents at the cheaper of vendor and auction house, not at what a vendor pays for your own mats; not yet tested in game |
+| Konsumentverket | 0.1.2 | New (2026-11-17); off by default since 0.1.2 (`## DefaultState: disabled`: tick it in the AddOns list to use it); 0.1.1 prices reagents at the cheaper of vendor and auction house, not at what a vendor pays for your own mats; not yet tested in game |
 | Arbetsformedlingen | 0.8 | Retired after v1.20.0 (shared quests and Platsbanken weren't used); 0.8 is an empty copy that switches itself off |
 
 ## Accepted ideas
