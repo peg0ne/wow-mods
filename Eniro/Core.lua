@@ -42,8 +42,7 @@ end
 local RequestRoster = Statskontoret.RequestRoster
 ns.RequestRoster = RequestRoster
 
--- This character's full name as the guild sees it (two-word Forever names;
--- see Arbetsförmedlingen). nil until the roster has loaded.
+-- This character's full name as the guild sees it (two-word Forever names). nil until the roster has loaded.
 local myName
 function ns.Me()
 	if myName then return myName end

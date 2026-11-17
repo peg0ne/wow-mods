@@ -46,8 +46,7 @@ function ns.InOurGuild()
 	return GetGuildInfo("player") == ns.GUILD
 end
 
--- This character's full name as the guild sees it (two-word Forever names;
--- see Arbetsförmedlingen).
+-- This character's full name as the guild sees it (two-word Forever names).
 local myName
 function ns.Me()
 	if myName then return myName end

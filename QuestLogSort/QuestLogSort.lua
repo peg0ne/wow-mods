@@ -3,8 +3,16 @@
 --
 -- Blizzard's QuestLogQuests_Update gives every row a layoutIndex and then lets
 -- QuestScrollFrame.Contents (a vertical layout frame) stack them in that order.
--- Objective lines are anchored to their quest row, so they move with it. After
--- each update we reorder the quest rows within each zone and lay out again.
+-- Objective lines are anchored to their quest row, so they move with it.
+--
+-- 1.8: nothing is written into Blizzard's rows any more. Up to 1.7 we changed
+-- their layoutIndex and topPadding and laid the log out again from addon
+-- code, which tainted the world map's quest panel and could get Blizzard's
+-- own actions blocked later ("Interface action failed because of an AddOn").
+-- Now, after every layout, the rows of a zone are only moved: each keeps its
+-- own anchors, shifted up or down so the zone's rows swap places. Moving a
+-- frame that isn't protected doesn't taint anything, so it also works in
+-- combat, and Blizzard's next layout simply starts over from its own order.
 
 local hooked, lastError = false, nil
 
@@ -17,15 +25,19 @@ local function Enabled()
 	return ready and not (QuestLogSortDB and QuestLogSortDB.disabled)
 end
 
--- Nothing is reordered in combat (dungeons are mostly combat). Re-watching
--- quests rebuilds the tracker, which can't move its quest item buttons in
--- combat, and writing to the map's quest rows from addon code then would
--- risk "blocked action" errors on the world map. Both catch up when combat
--- ends.
+-- The tracker isn't re-sorted in combat (dungeons are mostly combat):
+-- re-watching quests rebuilds the tracker, which can't move its quest item
+-- buttons in combat. It catches up when combat ends.
 local function InCombat()
 	return InCombatLockdown and InCombatLockdown()
 end
-local logPending = false
+
+local function Report(ok, err)
+	if not ok and err ~= lastError then
+		lastError = err
+		print("|cffff8040QuestLogSort error:|r " .. tostring(err))
+	end
+end
 
 -- Quests in the same zone have consecutive layoutIndex values (the zone
 -- header sits just before them), so a gap starts a new zone.
@@ -50,37 +62,77 @@ local function Groups()
 	return groups
 end
 
-local function Reorder()
-	local changed = false
-	for _, group in ipairs(Groups()) do
-		-- Unfinished quests keep their order, completed ones follow.
-		local open, done = {}, {}
-		for _, frame in ipairs(group) do
-			if C_QuestLog.IsComplete(frame.questID) then
-				done[#done + 1] = frame
-			else
-				open[#open + 1] = frame
-			end
-		end
-		if #done > 0 and #open > 0 then
-			-- Spacing depends on what is above a row (the first quest under a
-			-- header sits differently), so it stays with the position.
-			local slots = {}
-			for i, frame in ipairs(group) do
-				slots[i] = { layoutIndex = frame.layoutIndex, topPadding = frame.topPadding }
-			end
-			local i = 0
-			for _, list in ipairs({ open, done }) do
-				for _, frame in ipairs(list) do
-					i = i + 1
-					if frame.layoutIndex ~= slots[i].layoutIndex then changed = true end
-					frame.layoutIndex = slots[i].layoutIndex
-					frame.topPadding = slots[i].topPadding
-				end
-			end
+-- A row's anchors, all of which must be on the log's contents frame (where
+-- the layout puts them), and the y offset of its top. nil if it's anchored
+-- some other way; then the zone is left as Blizzard laid it out.
+local function Anchors(frame, contents)
+	local points, top = {}, nil
+	for i = 1, frame:GetNumPoints() do
+		local p = { frame:GetPoint(i) }
+		if p[2] ~= contents then return end
+		points[i] = p
+		if not top and type(p[1]) == "string" and p[1]:find("^TOP") then top = p[5] or 0 end
+	end
+	if #points == 0 or not top then return end
+	return points, top
+end
+
+local function Shift(frame, points, dy)
+	frame:ClearAllPoints()
+	for _, p in ipairs(points) do frame:SetPoint(p[1], p[2], p[3], p[4] or 0, (p[5] or 0) + dy) end
+end
+
+-- One zone: the places its rows take up (top to bottom, wherever they are
+-- right now, so running this twice changes nothing) are filled again with
+-- the unfinished quests first and the completed ones after, each in
+-- Blizzard's order. The space below each place stays with the place.
+local function ReorderGroup(group, contents)
+	local open, done = {}, {}
+	for _, frame in ipairs(group) do
+		if C_QuestLog.IsComplete(frame.questID) then
+			done[#done + 1] = frame
+		else
+			open[#open + 1] = frame
 		end
 	end
-	if changed then QuestScrollFrame.Contents:Layout() end
+	if #done == 0 or #open == 0 then return end
+
+	local rows = {}
+	for _, frame in ipairs(group) do
+		local points, top = Anchors(frame, contents)
+		local height = frame:GetHeight()
+		if not points or not height or height <= 0 then return end
+		rows[#rows + 1] = { frame = frame, points = points, top = top, height = height }
+	end
+	local byFrame = {}
+	for _, row in ipairs(rows) do byFrame[row.frame] = row end
+	local places = { unpack(rows) }
+	table.sort(places, function(a, b) return a.top > b.top end)
+	local gaps = {}
+	for i = 1, #places - 1 do
+		gaps[i] = math.max(0, places[i].top - places[i + 1].top - places[i].height)
+	end
+
+	local y, k = places[1].top, 0
+	for _, list in ipairs({ open, done }) do
+		for _, frame in ipairs(list) do
+			k = k + 1
+			local row = byFrame[frame]
+			if math.abs(y - row.top) > 0.01 then Shift(frame, row.points, y - row.top) end
+			y = y - row.height - (gaps[k] or 0)
+		end
+	end
+end
+
+local function Reorder()
+	if not Enabled() then return end
+	local contents = QuestScrollFrame.Contents
+	if not contents then return end
+	for _, group in ipairs(Groups()) do ReorderGroup(group, contents) end
+end
+
+local function SafeReorder()
+	Report(pcall(Reorder))
 end
 
 local function TryHook()
@@ -89,17 +141,13 @@ local function TryHook()
 		return
 	end
 	hooked = true
-	hooksecurefunc("QuestLogQuests_Update", function()
-		if not Enabled() then return end
-		if InCombat() then logPending = true return end
-		local ok, err = pcall(Reorder)
-		if not ok and err ~= lastError then
-			lastError = err
-			print("|cffff8040QuestLogSort error:|r " .. tostring(err))
-		end
-	end)
+	hooksecurefunc("QuestLogQuests_Update", SafeReorder)
+	-- The contents may also be laid out again on their own (a quest's
+	-- objectives growing): every layout puts Blizzard's order back.
+	local contents = QuestScrollFrame.Contents
+	if contents and type(contents.Layout) == "function" then hooksecurefunc(contents, "Layout", SafeReorder) end
 	-- The log may already be built; sort it now too.
-	if Enabled() and not InCombat() then pcall(Reorder) end
+	SafeReorder()
 end
 
 local function IsLoaded(name)
@@ -296,11 +344,7 @@ local function QueueTrackerSort()
 	trackerPending = true
 	-- Wait a moment so a burst of quest updates only sorts once.
 	C_Timer.After(0.2, function()
-		local ok, err = pcall(SortTracker)
-		if not ok and err ~= lastError then
-			lastError = err
-			print("|cffff8040QuestLogSort error:|r " .. tostring(err))
-		end
+		Report(pcall(SortTracker))
 	end)
 end
 
@@ -316,12 +360,6 @@ trackerEvents:SetScript("OnEvent", function(_, event)
 	if not Enabled() then return end
 	if event == "PLAYER_REGEN_ENABLED" then
 		-- Combat is over: do what was held back.
-		if logPending then
-			logPending = false
-			-- Reorder the rows as they are; calling Blizzard's update from
-			-- here would run it as addon code.
-			if QuestScrollFrame and QuestScrollFrame:IsVisible() then pcall(Reorder) end
-		end
 		if not trackerAfterCombat then return end
 		trackerAfterCombat = false
 	end
@@ -329,26 +367,26 @@ trackerEvents:SetScript("OnEvent", function(_, event)
 	QueueTrackerSort()
 end)
 
--- Zone lines in the tracker, in zone mode: the first quest of each zone gets
--- the zone's name and a line above it. Blizzard works out a block's height
--- when it sets the block's title, so right after that the title is moved
--- down and the height grows by the same amount: the tracker then makes room
--- by itself. The quest item buttons are never touched.
+-- Zone lines beside the tracker, in zone mode: the first quest of each zone
+-- gets the zone's name next to its title, on the side of the tracker that
+-- has room (the left, unless the tracker sits at the screen's left edge).
+--
+-- 1.8: these are frames of our own, on UIParent, that only follow a block's
+-- position and visibility. Up to 1.7 they sat inside the tracker, which
+-- meant moving the block's title and growing block.height: a write into
+-- Blizzard's tracker that tainted it, so its quest item buttons could get
+-- "Interface action failed because of an AddOn". Nothing in the tracker is
+-- written or moved now, so it also works in combat.
 --
 -- Clicking a zone line folds the zone up: its quests are unwatched (only
 -- through the quest API, like the sorting) and remembered per character,
--- and the zone stays as a line "+ Westfall (3)" in the gap above the next
--- zone, or below the last quest. Clicking that watches them again. A quest
--- in a folded zone that gets watched (a new quest, or the game watching one
--- that made progress) is folded away with the rest.
---
--- Changing the height is a write into Blizzard's data, so it is only done
--- out of combat; a tracker update in combat puts the title back and the
--- gap disappears until the next update after combat. Folding waits for
--- combat to end too.
-local ROW, SPACE = 16, 8
-local saved = setmetatable({}, { __mode = "k" }) -- block -> the title's own anchors
-local lines = setmetatable({}, { __mode = "k" }) -- block -> its zone line frames
+-- and the zone stays as a line "+ Westfall (3)" under the last quest.
+-- Clicking that watches them again. A quest in a folded zone that gets
+-- watched (a new quest, or the game watching one that made progress) is
+-- folded away with the rest. Folding waits for combat to end.
+local ROW = 16
+local lines = setmetatable({}, { __mode = "k" })   -- our frame -> its zone line frames
+local holders = setmetatable({}, { __mode = "k" }) -- tracker block -> our frame over it
 
 local function Say(text)
 	print("|cff80c0ffQuestLogSort:|r " .. text)
@@ -489,64 +527,43 @@ local function FoldedRows(names)
 end
 
 -- What each block shows, worked out once per frame (every block in one
--- tracker update asks): quest ID -> { name, above = folded zones over it,
--- gap, below = folded zones under the last quest, extra }.
+-- tracker update asks): quest ID -> { name = the zone it starts, below =
+-- folded zones, under the last quest }.
 local plan, planAt = nil, nil
 local function Plan()
 	local now = GetTime()
 	if plan and planAt == now then return plan end
 	plan, planAt = {}, now
 	local zones, names = ZoneOrder()
-	local rows = FoldedRows(names)
-	local nextRow, last, lastID, shown = 1, nil, nil, 0
+	local last, lastID = nil, nil
 	for _, id in ipairs(WatchedQuests()) do
 		local z = zones[id]
 		if z then
-			if z ~= last and names[z] then
-				local entry = { name = names[z], above = {} }
-				local r = ZoneRank(z, names)
-				while rows[nextRow] and rows[nextRow].rank < r do
-					entry.above[#entry.above + 1] = rows[nextRow]
-					nextRow = nextRow + 1
-				end
-				entry.gap = (shown > 0 and SPACE or 0) + ROW * (#entry.above + 1)
-				plan[id] = entry
-				shown = shown + 1
-			end
+			if z ~= last and names[z] then plan[id] = { name = names[z] } end
 			last, lastID = z, id
 		end
 	end
-	if lastID and rows[nextRow] then
-		local entry = plan[lastID] or { above = {} }
-		entry.below = {}
-		while rows[nextRow] do
-			entry.below[#entry.below + 1] = rows[nextRow]
-			nextRow = nextRow + 1
-		end
-		entry.extra = SPACE + ROW * #entry.below
-		plan[lastID] = entry
+	local rows = FoldedRows(names)
+	if lastID and #rows > 0 then
+		plan[lastID] = plan[lastID] or {}
+		plan[lastID].below = rows
 	end
 	return plan
 end
 
-local function ZoneLine(block, i)
-	local list = lines[block]
+local function ZoneLine(owner, i)
+	local list = lines[owner]
 	if not list then
 		list = {}
-		lines[block] = list
+		lines[owner] = list
 	end
 	local line = list[i]
 	if line then return line end
-	line = CreateFrame("Frame", nil, block)
+	line = CreateFrame("Frame", nil, owner)
 	line:SetHeight(ROW - 2)
 	line:EnableMouse(true)
 	line.text = line:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	line.text:SetPoint("LEFT")
-	line.rule = line:CreateTexture(nil, "ARTWORK")
-	line.rule:SetHeight(1)
-	if line.rule.SetColorTexture then line.rule:SetColorTexture(1, 0.82, 0, 0.35) end
-	line.rule:SetPoint("LEFT", line.text, "RIGHT", 6, 0)
-	line.rule:SetPoint("RIGHT")
+	line.text:SetAllPoints()
 	line:SetScript("OnEnter", function(self) self.text:SetTextColor(1, 1, 1) end)
 	line:SetScript("OnLeave", function(self) self.text:SetTextColor(1, 0.82, 0) end)
 	line:SetScript("OnMouseUp", function(self) if self.zone then ToggleZone(self.zone) end end)
@@ -554,15 +571,24 @@ local function ZoneLine(block, i)
 	return line
 end
 
-local function ShowLine(line, zone, count)
+-- The text sets the line's width, so it can hug the tracker from either side.
+local function ShowLine(line, zone, count, justify)
 	line.zone = zone
 	if count then
 		line.text:SetText("+ " .. zone .. " |cffa0a0a0(" .. count .. ")|r")
 	else
 		line.text:SetText("- " .. zone)
 	end
+	line.text:SetJustifyH(justify or "LEFT")
 	line.text:SetTextColor(1, 0.82, 0)
+	line:SetWidth(math.ceil(line.text:GetStringWidth() or 100) + 4)
 	line:Show()
+end
+
+local function HideLines(owner)
+	if owner and lines[owner] then
+		for _, line in ipairs(lines[owner]) do line:Hide() end
+	end
 end
 
 -- With every zone folded no quest is watched, the tracker has no blocks to
@@ -596,14 +622,11 @@ local function UpdatePanel()
 	local width = tracker and tracker:GetWidth() or 0
 	panel:SetWidth(width > 50 and width - 24 or 220)
 	panel:SetHeight(ROW * #rows)
-	if lines[panel] then
-		for _, line in ipairs(lines[panel]) do line:Hide() end
-	end
+	HideLines(panel)
 	for i, row in ipairs(rows) do
 		local line = ZoneLine(panel, i)
 		line:ClearAllPoints()
 		line:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -ROW * (i - 1))
-		line:SetPoint("RIGHT", panel, "RIGHT")
 		ShowLine(line, row.name, row.count)
 	end
 	panel:Show()
@@ -616,67 +639,70 @@ QueuePanel = function()
 	-- Once the watch list has settled.
 	C_Timer.After(0.1, function()
 		panelPending = false
-		local ok, err = pcall(UpdatePanel)
-		if not ok and err ~= lastError then
-			lastError = err
-			print("|cffff8040QuestLogSort error:|r " .. tostring(err))
-		end
+		Report(pcall(UpdatePanel))
 	end)
 end
 
-local function PutBack(block)
-	if lines[block] then
-		for _, line in ipairs(lines[block]) do line:Hide() end
+-- Our frame over a tracker block: on UIParent, so the tracker's own frames
+-- get nothing new, but anchored to the block and shown and hidden with it.
+local function Holder(block)
+	local h = holders[block]
+	if h then return h end
+	h = CreateFrame("Frame", nil, UIParent)
+	h:SetAllPoints(block)
+	h:SetFrameStrata(block:GetFrameStrata() or "MEDIUM")
+	h:SetShown(block:IsVisible())
+	block:HookScript("OnShow", function() h:Show() end)
+	block:HookScript("OnHide", function() h:Hide() end)
+	holders[block] = h
+	return h
+end
+
+-- The left of the tracker, unless it is too close to the screen's edge.
+local function LeftSide(block)
+	local tracker = ObjectiveTrackerFrame or QuestWatchFrame or block
+	local left = tracker:GetLeft()
+	return not left or left * tracker:GetEffectiveScale() > 200
+end
+
+-- A line beside the holder: at its top edge, or under its bottom edge.
+local function PlaceLine(line, h, left, edge, y)
+	line:ClearAllPoints()
+	if left then
+		line:SetPoint("TOPRIGHT", h, edge .. "LEFT", -8, y)
+	else
+		line:SetPoint("TOPLEFT", h, edge .. "RIGHT", 8, y)
 	end
-	local points = saved[block]
-	if not points then return end
-	saved[block] = nil
-	block.HeaderText:ClearAllPoints()
-	for _, p in ipairs(points) do block.HeaderText:SetPoint(unpack(p)) end
 end
 
 local function OnHeader(block)
-	local header = block and block.HeaderText
-	if not (header and header.GetNumPoints) then return end
-	-- Each update starts from where Blizzard puts the title.
-	PutBack(block)
-	if not (Enabled() and ByZone()) or InCombat() or type(block.height) ~= "number" then return end
+	if not block or (block.IsForbidden and block:IsForbidden()) then return end
+	-- Each update starts from nothing shown.
+	HideLines(holders[block])
+	if not (Enabled() and ByZone()) then return end
 	local id = block.poiQuestID or block.questID or block.id
 	local entry = type(id) == "number" and Plan()[id]
 	if not entry then return end
+	local h = Holder(block)
+	h:SetScale(block:GetEffectiveScale() / UIParent:GetEffectiveScale())
+	local left = LeftSide(block)
+	local justify = left and "RIGHT" or "LEFT"
 	local n = 0
 	if entry.name then
-		local points = {}
-		for i = 1, header:GetNumPoints() do points[i] = { header:GetPoint(i) } end
-		if #points == 0 then return end
-		saved[block] = points
-		header:ClearAllPoints()
-		for _, p in ipairs(points) do header:SetPoint(p[1], p[2], p[3], p[4] or 0, (p[5] or 0) - entry.gap) end
-		block.height = block.height + entry.gap
-		-- Bottom up: this zone's line, then the folded zones above it.
-		local stack = { { entry.name } }
-		for i = #entry.above, 1, -1 do stack[#stack + 1] = { entry.above[i].name, entry.above[i].count } end
-		for k, row in ipairs(stack) do
-			n = n + 1
-			local line = ZoneLine(block, n)
-			line:ClearAllPoints()
-			line:SetPoint("BOTTOMLEFT", header, "TOPLEFT", 0, 2 + ROW * (k - 1))
-			line:SetPoint("RIGHT", block, "RIGHT")
-			ShowLine(line, row[1], row[2])
-		end
+		-- Level with the quest's title.
+		local header = block.HeaderText
+		local ht, bt = header and header:GetTop(), block:GetTop()
+		n = n + 1
+		local line = ZoneLine(h, n)
+		PlaceLine(line, h, left, "TOP", (ht and bt) and (ht - bt + 1) or 0)
+		ShowLine(line, entry.name, nil, justify)
 	end
 	if entry.below then
-		-- Folded zones after the last quest, in the space added at the bottom.
-		block.height = block.height + entry.extra
-		local hl, bl = header:GetLeft(), block:GetLeft()
-		local indent = (hl and bl) and (hl - bl) or 0
 		for i, row in ipairs(entry.below) do
 			n = n + 1
-			local line = ZoneLine(block, n)
-			line:ClearAllPoints()
-			line:SetPoint("BOTTOMLEFT", block, "BOTTOMLEFT", indent, ROW * (#entry.below - i))
-			line:SetPoint("RIGHT", block, "RIGHT")
-			ShowLine(line, row.name, row.count)
+			local line = ZoneLine(h, n)
+			PlaceLine(line, h, left, "BOTTOM", -2 - ROW * (i - 1))
+			ShowLine(line, row.name, row.count, justify)
 		end
 	end
 end
@@ -752,7 +778,7 @@ SlashCmdList.QUESTLOGSORT = function(msg)
 	QueuePanel()
 	if on then
 		Say("på. Questloggen och trackern sorteras igen.")
-		if QuestScrollFrame and QuestScrollFrame:IsVisible() and not InCombat() then pcall(Reorder) end
+		if QuestScrollFrame and QuestScrollFrame:IsVisible() then SafeReorder() end
 		if InCombat() then trackerAfterCombat = true else QueueTrackerSort() end
 	else
 		-- Blizzard's own order comes back the next time the log refreshes;
