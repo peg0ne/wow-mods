@@ -21,14 +21,14 @@ globals = {
 	"SLASH_SCB1", "SLASH_SCB2", "SkolverketCharDB",
 	"SkolverketDB", "SlashCmdList",
 	-- Opening the color picker sets its fields (Bolagsverket).
-	"ColorPickerFrame",
+	"ColorPickerFrame", "StaticPopupDialogs",
 }
 
 -- Game API and UI globals the addons read. Some are only fallbacks for older
 -- clients (see "The Forever client" in README.md).
 read_globals = {
 	"GetServerTime", "GossipFrame", "InCombatLockdown", "QuestFrame",
-	"AcceptQuest", "Ambiguate", "BackdropTemplateMixin", "BokforingFrame", "BokforingDB", "Auctionator",
+	"AcceptQuest", "Ambiguate", "BackdropTemplateMixin", "BokforingFrame", "BokforingDB", "Auctionator", "C_AuctionHouse", "AuctionHouseFrame", "ChatEdit_InsertLink", "GetItemStats", "GetItemInfoInstant", "ITEM_QUALITY_COLORS", "StaticPopup_Show", "OKAY", "CANCEL", "MenuUtil", "ReloadUI",
 	"GetMerchantNumItems", "GetMerchantItemID", "GetMerchantItemInfo", "C_MerchantFrame", "GetItemCount", "ProfessionsFrame", "TradeSkillFrame",
 	"COMBATLOG_OBJECT_REACTION_HOSTILE", "COMBATLOG_OBJECT_TYPE_GUARDIAN", "CompactUnitFrame_UpdateName", "PartyFrame", "UnitInParty", "UnitInRaid", "UnitIsInMyGuild", "UnitIsUnit",
 	"COMBATLOG_OBJECT_TYPE_PET", "COMBATLOG_OBJECT_TYPE_PLAYER", "COMBATLOG_XPGAIN_FIRSTPERSON",

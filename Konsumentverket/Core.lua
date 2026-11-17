@@ -15,6 +15,8 @@
 -- Recipes are saved per character and profession, so /konsument works at
 -- the vendor too, without the profession window open. The window also
 -- opens beside the profession window (/konsument auto turns that off).
+--
+-- 0.2 adds an equipment search by stats (/konsument sök, Search.lua).
 
 local _, ns = ...
 
@@ -319,9 +321,14 @@ SlashCmdList.KONSUMENTVERKET = function(msg)
 	if msg == "auto" then
 		db.auto = not db.auto
 		Print(db.auto and "öppnas bredvid yrkesfönstret." or "öppnas bara med /konsument.")
+	elseif msg == "plats" then
+		db.dockPos = nil
+		Print("fönstret öppnas bredvid yrkesfönstret igen, där det finns plats.")
+	elseif msg == "sök" or msg == "sok" then
+		ns.ToggleSearch()
 	elseif msg == "" then
 		ns.ToggleWindow()
 	else
-		Print("/konsument visar vad dina recept är värda hos en handlare, /konsument auto slår på eller av att fönstret öppnas bredvid yrkesfönstret. Öppna yrkesfönstret en gång för att läsa in recepten, och handlare för att lära dig vad de tar för reagenserna.")
+		Print("/konsument visar vad dina recept är värda hos en handlare, /konsument sök söker utrustning med den statistik du väljer, bland det dina recept gör och i auktionshuset, /konsument auto slår på eller av att fönstret öppnas bredvid yrkesfönstret (flytta det så öppnas det där nästa gång; /konsument plats glömmer platsen). Öppna yrkesfönstret en gång för att läsa in recepten, och handlare för att lära dig vad de tar för reagenserna.")
 	end
 end

@@ -936,6 +936,7 @@ local WINDOWS = {
 	{ "Polisen", "Polisen", "POLISEN" },
 	{ "SCB", "SCB", "SCB" },
 	{ "Konsumentverket", "Konsumentverket", "KONSUMENTVERKET" },
+	{ "Konsumentverket", "Sök utrustning", "KONSUMENTVERKET", "sök" },
 }
 
 -- invert: the addon stores "quiet", the box shows the opposite.
@@ -1022,6 +1023,30 @@ local function Loaded(name)
 	return IsAddOnLoaded and IsAddOnLoaded(name)
 end
 
+-- Installed but switched off in the AddOns list (2.18):
+-- its button turns it on for this character and reloads the interface.
+local function Installed(name)
+	local info = C_AddOns and C_AddOns.GetAddOnInfo
+	if not info then return false end
+	local ok, found = pcall(info, name)
+	return ok and found ~= nil
+end
+
+local function TurnOn(name, label)
+	if not StaticPopupDialogs or not StaticPopup_Show then return end
+	StaticPopupDialogs.GILDEPANEL_TURN_ON = StaticPopupDialogs.GILDEPANEL_TURN_ON or {
+		text = "%s är avstängt. Slå på det och ladda om gränssnittet?",
+		button1 = "Slå på", button2 = "Avbryt",
+		OnAccept = function(_, data)
+			C_AddOns.EnableAddOn(data, UnitName("player"))
+			ReloadUI()
+		end,
+		timeout = 0, whileDead = true, hideOnEscape = true,
+	}
+	local popup = StaticPopup_Show("GILDEPANEL_TURN_ON", label)
+	if popup then popup.data = name end
+end
+
 local function SettingValue(group, item)
 	local t = _G[group.db]
 	if type(t) ~= "table" then return false end
@@ -1054,7 +1079,12 @@ local function RefreshHub()
 	for _, b in ipairs(hub.windows) do
 		local api = b.page and API()
 		local ready = b.page and api and api.Toggle or (not b.page and SlashCmdList[b.key])
-		if Loaded(b.addon) and ready then b:Enable() else b:Disable() end
+		if (Loaded(b.addon) and ready) or (not Loaded(b.addon) and Installed(b.addon)) then b:Enable() else b:Disable() end
+		-- Grey text on a switched-off addon's button, which turns it on.
+		local fs = b:GetFontString()
+		if fs then
+			if Loaded(b.addon) then fs:SetTextColor(1, 0.82, 0) else fs:SetTextColor(0.6, 0.6, 0.6) end
+		end
 	end
 	for _, row in ipairs(hub.groups) do
 		local loaded = Loaded(row.group.addon) and type(_G[row.group.db]) == "table"
@@ -1153,8 +1183,10 @@ local function BuildHub()
 		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
 		GameTooltip:AddLine(self.label)
 		local cmd = self.key and _G["SLASH_" .. self.key .. "1"]
-		if not Loaded(self.addon) then
-			GameTooltip:AddLine(self.addon .. " är inte på.", 0.6, 0.6, 0.6)
+		if not Loaded(self.addon) and Installed(self.addon) then
+			GameTooltip:AddLine(self.addon .. " är avstängt. Klicka för att slå på det (laddar om gränssnittet).", 1, 0.82, 0, true)
+		elseif not Loaded(self.addon) then
+			GameTooltip:AddLine(self.addon .. " är inte installerat.", 0.6, 0.6, 0.6)
 		elseif cmd then
 			GameTooltip:AddLine("Samma som " .. cmd .. (self.arg and (" " .. self.arg) or ""), 1, 1, 1)
 		elseif self.page then
@@ -1174,6 +1206,10 @@ local function BuildHub()
 			y = y - 24
 		end
 		local b = Button(page, w[2], bw, function()
+			if not Loaded(w[1]) then
+				if Installed(w[1]) and C_AddOns.EnableAddOn then TurnOn(w[1], w[1]) end
+				return
+			end
 			if not w.page then RunSlash(w[3], w[4] or "", w[2]) return end
 			local api = API()
 			if api and api.Toggle then api.Toggle(w.page) else Print("Skatteverket är inte på.") end

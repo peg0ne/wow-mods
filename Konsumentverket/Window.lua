@@ -79,6 +79,7 @@ local function ShowTooltip(row)
 	GameTooltip:AddDoubleLine("Vinst", Profit(v), 1, 0.82, 0, 1, 1, 1)
 	GameTooltip:AddLine(" ")
 	GameTooltip:AddLine("Varje reagens kostar det billigaste av |cff80c0ffhandlare|r och |cffffc040AH|r (Auctionators senaste skanning).", 0.7, 0.7, 0.7, true)
+	GameTooltip:AddLine("Högerklicka för att lägga reagenserna i en inköpslista i Auctionator.", 0.7, 0.7, 0.7, true)
 	GameTooltip:Show()
 end
 
@@ -129,6 +130,10 @@ local function Build()
 		end
 		row:SetScript("OnEnter", ShowTooltip)
 		row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+		row:SetScript("OnClick", function(self, mouse)
+			if mouse == "RightButton" and self.entry then ns.ShopMenu(self, self.entry.rec) end
+		end)
 		rows[i] = row
 	end
 
@@ -150,12 +155,25 @@ local function Build()
 	Text(frame, "GameFontHighlightSmall", "LEFT", only, "RIGHT", 4, 0):SetText("Bara recept som ger färdighet")
 	frame.only = only
 
+	local search = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+	search:SetSize(140, 22)
+	search:SetText("Sök utrustning")
+	search:SetPoint("TOPRIGHT", -24, -404 + dy)
+	search:SetScript("OnClick", function() ns.ToggleSearch() end)
+
 	frame:EnableMouseWheel(true)
 	frame:SetScript("OnMouseWheel", function(_, delta)
 		offset = math.max(0, math.min(offset - delta, #list - ROWS))
 		ns.RefreshWindow()
 	end)
 	frame:SetScript("OnHide", function() auto = false end)
+	-- Moved while beside the profession window: open there from now on
+	-- (0.2; it could cover the profession window's tabs).
+	frame:HookScript("OnDragStop", function(self)
+		if not auto then return end
+		local left, top = self:GetLeft(), self:GetTop()
+		if left and top then ns.DB().dockPos = { left, top } end
+	end)
 	frame:Hide()
 end
 
@@ -237,7 +255,24 @@ function ns.ShowBesideProfession()
 	if not frame then Build() end
 	if frame:IsShown() then ns.RefreshWindow() return end
 	frame:ClearAllPoints()
-	frame:SetPoint("TOPLEFT", pf, "TOPRIGHT", 4, 0)
+	local db = ns.DB()
+	if db.dockPos then
+		frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", db.dockPos[1], db.dockPos[2])
+	else
+		-- Beside it where there is room (the screen would push a window that
+		-- doesn't fit back over the profession window); else at the screen's
+		-- right edge, top aligned.
+		local scale = pf:GetEffectiveScale() / frame:GetEffectiveScale()
+		local right, left = (pf:GetRight() or 0) * scale, (pf:GetLeft() or 0) * scale
+		local w = frame:GetWidth()
+		if right + 4 + w <= UIParent:GetWidth() then
+			frame:SetPoint("TOPLEFT", pf, "TOPRIGHT", 4, 0)
+		elseif left - 4 - w >= 0 then
+			frame:SetPoint("TOPRIGHT", pf, "TOPLEFT", -4, 0)
+		else
+			frame:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -10, (pf:GetTop() or 0) * scale - UIParent:GetHeight())
+		end
+	end
 	frame:Show()
 	auto = true
 	ns.RefreshWindow()
@@ -245,4 +280,124 @@ end
 
 function ns.ProfessionClosed()
 	if frame and auto then frame:Hide() end
+end
+
+---------------------------------------------------------------------------
+-- Shopping list (as Bokföring does it): right-click a recipe, say how many
+-- crafts, and the reagents the auction house sells cheapest go into an
+-- Auctionator shopping list; what a vendor sells cheaper is printed with
+-- where to buy it. Buying stays one click per purchase in Auctionator, as
+-- the game demands. What is in the bags is taken off unless unticked.
+
+local CALLER = "Konsumentverket"
+
+local function SearchString(name, count)
+	local api = Auctionator and Auctionator.API and Auctionator.API.v1
+	if api and api.ConvertToSearchString then
+		local ok, text = pcall(api.ConvertToSearchString, CALLER, { searchString = name, isExact = true, quantity = count })
+		if ok and text then return text end
+		ok, text = pcall(api.ConvertToSearchString, CALLER, { searchString = name, isExact = true })
+		if ok and text then return text end
+	end
+	return "\"" .. name .. "\""
+end
+
+local function Loaded(item)
+	return C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(item)
+end
+
+function ns.Shop(rec, crafts, tries)
+	local useOwned = ns.DB().useOwned ~= false
+	local buy, unknown = {}, false
+	for _, r in ipairs(rec.reagents) do
+		local n = r[2] * crafts - (useOwned and ns.Have(r[1]) or 0)
+		if n > 0 then
+			buy[r[1]] = (buy[r[1]] or 0) + n
+			if not Loaded(r[1]) then
+				unknown = true
+				ns.ItemName(r[1])
+			end
+		end
+	end
+	-- Names the game has not loaded yet: ask for them and try again shortly.
+	if unknown and (tries or 0) < 10 then
+		C_Timer.After(0.3, function() ns.Shop(rec, crafts, (tries or 0) + 1) end)
+		return
+	end
+	if not next(buy) then
+		ns.Print(string.format("du har redan allt till %d x %s i väskorna.", crafts, rec.name or "?"))
+		return
+	end
+	local listName = string.format("Konsumentverket: %s x%d", rec.name or "?", crafts)
+	local terms, ah, vendor, total = {}, {}, {}, 0
+	for item, n in pairs(buy) do
+		local name = ns.ItemName(item)
+		local each, kind = ns.Cost(item)
+		local price = each and (" (" .. ns.Money(each * n) .. ")") or ""
+		total = total + (each or 0) * n
+		if kind == "handlare" then
+			local where = ns.BuyWhere(item)
+			table.insert(vendor, string.format("%d x %s%s%s", n, name, price, where and (", " .. where) or ""))
+		else
+			table.insert(terms, SearchString(name, n))
+			table.insert(ah, string.format("%d x %s%s", n, name, each and price or " (pris okänt)"))
+		end
+	end
+	table.sort(ah)
+	table.sort(vendor)
+	if #terms > 0 then
+		local api = Auctionator and Auctionator.API and Auctionator.API.v1
+		if api and api.CreateShoppingList and pcall(api.CreateShoppingList, CALLER, listName, terms) then
+			ns.Print(string.format("Auctionator-listan \"%s\": öppna Shopping i Auctionator, välj listan och köp med ett klick per sak.", listName))
+		else
+			ns.Print("kunde inte göra en Auctionator-lista; köp det här själv:")
+		end
+		for _, line in ipairs(ah) do ns.Print("  AH: " .. line) end
+	end
+	for _, line in ipairs(vendor) do ns.Print("  handlare: " .. line) end
+	ns.Print(string.format("ungefär %s i allt%s.", ns.Money(total), useOwned and ", det du har i väskorna avdraget" or ""))
+end
+
+StaticPopupDialogs.KONSUMENTVERKET_CRAFTS = {
+	text = "Hur många av %s?",
+	button1 = OKAY,
+	button2 = CANCEL,
+	hasEditBox = true,
+	timeout = 0,
+	whileDead = true,
+	hideOnEscape = true,
+	OnAccept = function(self, data)
+		local box = self.editBox or self.EditBox
+		local n = tonumber(box:GetText())
+		if n and n >= 1 and n <= 1000 then ns.Shop(data, math.floor(n)) else ns.Print("skriv ett antal, 1 till 1000.") end
+	end,
+	EditBoxOnEnterPressed = function(box)
+		local popup = box:GetParent()
+		StaticPopupDialogs.KONSUMENTVERKET_CRAFTS.OnAccept(popup, popup.data)
+		popup:Hide()
+	end,
+	EditBoxOnEscapePressed = function(box) box:GetParent():Hide() end,
+}
+
+local function Ask(rec)
+	local dialog = StaticPopup_Show("KONSUMENTVERKET_CRAFTS", rec.name or "?", nil, rec)
+	local box = dialog and (dialog.editBox or dialog.EditBox)
+	if box then
+		box:SetText("1")
+		box:HighlightText()
+	end
+end
+
+-- The right-click menu on a recipe (here and in the gear search).
+function ns.ShopMenu(owner, rec)
+	if not (MenuUtil and MenuUtil.CreateContextMenu) then
+		Ask(rec)
+		return
+	end
+	MenuUtil.CreateContextMenu(owner, function(_, root)
+		root:CreateTitle(rec.name or "?")
+		root:CreateButton("Köp reagenserna för N st...", function() Ask(rec) end)
+		root:CreateCheckbox("Räkna av det jag har i väskorna", function() return ns.DB().useOwned ~= false end,
+			function() ns.DB().useOwned = ns.DB().useOwned == false end)
+	end)
 end
