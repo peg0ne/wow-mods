@@ -1,6 +1,7 @@
 -- SCB, the /scb window, in the style of Skatteverket's panel: one row per
 -- member with figures, the guild's totals, and a few facts. Click a column
--- heading to sort by it (again to reverse).
+-- heading to sort by it (again to reverse). The guild's total sits right
+-- under the last member shown (0.4.1).
 
 local _, ns = ...
 
@@ -85,11 +86,13 @@ local function Build()
 		frame.headers[col.key] = h
 		x = x + col.width
 	end
+	Statskontoret.Rule(frame, 20, 20, -68 + dy, 0.2)
 
 	for i = 1, ROWS + 1 do
 		local row = CreateFrame("Frame", nil, frame)
 		row:SetSize(WIDTH - 40, ROW_H)
 		row:SetPoint("TOPLEFT", 20, -70 + dy - (i - 1) * ROW_H)
+		if i <= ROWS then Statskontoret.Stripe(row, i) end
 		row.cells = {}
 		local cx = 4
 		for c, col in ipairs(COLUMNS) do
@@ -101,10 +104,17 @@ local function Build()
 		end
 		rows[i] = row
 	end
-	-- The last row is the guild total, set apart.
-	rows[ROWS + 1]:SetPoint("TOPLEFT", 20, -74 + dy - ROWS * ROW_H)
+	-- The last row is the guild total, right under the last member shown
+	-- (see RefreshWindow), with a line above it; the facts follow.
+	frame.top = -70 + dy
+	local total = rows[ROWS + 1]
+	total.rule = Statskontoret.Rule(total, 0, 0, 1, 0.3)
 
-	frame.facts = Text(frame, "GameFontHighlightSmall", "TOPLEFT", 24, -110 + dy - ROWS * ROW_H)
+	frame.scroll = Statskontoret.ScrollMark(frame)
+	frame.scroll:SetPoint("TOPRIGHT", -12, -72 + dy)
+	frame.scroll:SetHeight(ROWS * ROW_H - 4)
+
+	frame.facts = Text(frame, "GameFontHighlightSmall", "TOPLEFT", total, "BOTTOMLEFT", 4, -14)
 	frame.facts:SetWidth(WIDTH - 48)
 	frame.facts:SetSpacing(4)
 
@@ -125,8 +135,11 @@ end
 function ns.RefreshWindow()
 	if not frame or not frame:IsShown() then return end
 	for key, h in pairs(frame.headers) do
-		local arrow = key == sortKey and (sortDown and " v" or " ^") or ""
-		h.text:SetText(h.col.label .. arrow)
+		if key == sortKey then
+			h.text:SetText("|cffffffff" .. h.col.label .. "|r" .. Statskontoret.SortArrow(sortDown))
+		else
+			h.text:SetText(h.col.label)
+		end
 	end
 	list = ns.People()
 	Sort(list)
@@ -140,8 +153,17 @@ function ns.RefreshWindow()
 			row:Hide()
 		end
 	end
+	frame.scroll:Update(offset, ROWS, #list)
 	local t = ns.Totals(list)
 	local total = rows[ROWS + 1]
+	local shown = math.max(1, math.min(ROWS, #list - offset))
+	total:SetPoint("TOPLEFT", 20, frame.top - shown * ROW_H - 6)
+	-- Play time only counts once someone has typed /played.
+	local anyPlayed = false
+	for _, p in ipairs(list) do
+		if p.played then anyPlayed = true end
+	end
+	if not anyPlayed then t.played = nil end
 	t.name = nil
 	for c, col in ipairs(COLUMNS) do
 		total.cells[c]:SetText(col.key == "name" and "|cffffd100Hela gillet|r"

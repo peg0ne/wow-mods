@@ -8,7 +8,7 @@
 
 local S = {}
 Statskontoret = S
-S.API = 1
+S.API = 2
 
 ---------------------------------------------------------------------------
 -- Windows.
@@ -85,6 +85,130 @@ function S.Window(name, titleText, width, height)
 	f:SetScript("OnDragStop", f.StopMovingOrSizing)
 	tinsert(UISpecialFrames, name)
 	return f, portraitLook
+end
+
+---------------------------------------------------------------------------
+-- Window parts (API 2). Drawn with plain colored textures, so they look the
+-- same on every client and need no template.
+
+local GOLD_R, GOLD_G, GOLD_B = 1, 0.82, 0
+
+local function Color(tex, r, g, b, a)
+	if tex.SetColorTexture then tex:SetColorTexture(r, g, b, a or 1) else tex:SetTexture(r, g, b, a or 1) end
+end
+
+-- A faint gold line across parent at y, from left in from the left edge to
+-- right in from the right edge.
+function S.Rule(parent, left, right, y, alpha)
+	local line = parent:CreateTexture(nil, "ARTWORK")
+	Color(line, GOLD_R, GOLD_G, GOLD_B, alpha or 0.25)
+	line:SetHeight(1)
+	line:SetPoint("TOPLEFT", left, y)
+	line:SetPoint("TOPRIGHT", -right, y)
+	return line
+end
+
+-- Tabs drawn as words, the chosen one gold and underlined, for switching
+-- what a window shows. They look nothing like UIPanelButtons, which do
+-- things. specs is { { key, label }, ... }; width gives every tab the same
+-- width, else each fits its word. Click calls onSelect(key). Returns the
+-- bar (place it with SetPoint) with bar:Select(key) to mark one without
+-- calling onSelect.
+function S.Tabs(parent, specs, onSelect, width)
+	local bar = CreateFrame("Frame", nil, parent)
+	bar:SetHeight(24)
+	bar.buttons = {}
+	local function Paint(b)
+		local on = b.key == bar.selected
+		b.mark:SetShown(on)
+		b.bg:SetShown(on)
+		if on then
+			b.text:SetTextColor(GOLD_R, GOLD_G, GOLD_B)
+		elseif b:IsMouseOver() then
+			b.text:SetTextColor(1, 1, 1)
+		else
+			b.text:SetTextColor(0.65, 0.65, 0.65)
+		end
+	end
+	function bar:Select(key)
+		self.selected = key
+		for _, b in ipairs(self.buttons) do Paint(b) end
+	end
+	local x = 0
+	for _, spec in ipairs(specs) do
+		local b = CreateFrame("Button", nil, bar)
+		b.key = spec[1]
+		b.text = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+		b.text:SetPoint("CENTER", 0, 1)
+		b.text:SetText(spec[2])
+		local w = width or (b.text:GetStringWidth() + 28)
+		b:SetSize(w, 24)
+		b:SetPoint("BOTTOMLEFT", x, 0)
+		x = x + w + (width and 0 or 2)
+		b.bg = b:CreateTexture(nil, "BACKGROUND")
+		b.bg:SetAllPoints()
+		Color(b.bg, GOLD_R, GOLD_G, GOLD_B, 0.07)
+		local hover = b:CreateTexture(nil, "HIGHLIGHT")
+		hover:SetAllPoints()
+		Color(hover, 1, 1, 1, 0.05)
+		b.mark = b:CreateTexture(nil, "OVERLAY")
+		Color(b.mark, GOLD_R, GOLD_G, GOLD_B, 0.9)
+		b.mark:SetHeight(2)
+		b.mark:SetPoint("BOTTOMLEFT", 2, 0)
+		b.mark:SetPoint("BOTTOMRIGHT", -2, 0)
+		b:SetScript("OnEnter", Paint)
+		b:SetScript("OnLeave", Paint)
+		b:SetScript("OnClick", function(self)
+			if PlaySound and SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB then PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB) end
+			bar:Select(self.key)
+			onSelect(self.key)
+		end)
+		table.insert(bar.buttons, b)
+	end
+	bar:SetWidth(math.max(x, 1))
+	return bar
+end
+
+-- A faint band behind every other row of a list, so a line is easy to
+-- follow across the columns.
+function S.Stripe(row, i)
+	if i % 2 == 1 then return end
+	local band = row:CreateTexture(nil, "BACKGROUND")
+	band:SetAllPoints()
+	Color(band, 1, 1, 1, 0.035)
+end
+
+-- A thin bar beside a list that shows which part of it is in view (the
+-- list scrolls with the mouse wheel). Place and size it with SetPoint and
+-- SetHeight; mark:Update(offset, shown, total) after each scroll. Hidden
+-- when everything fits.
+function S.ScrollMark(parent)
+	local m = CreateFrame("Frame", nil, parent)
+	m:SetWidth(4)
+	local track = m:CreateTexture(nil, "BACKGROUND")
+	track:SetAllPoints()
+	Color(track, 1, 1, 1, 0.08)
+	local thumb = m:CreateTexture(nil, "ARTWORK")
+	Color(thumb, GOLD_R, GOLD_G, GOLD_B, 0.6)
+	thumb:SetWidth(4)
+	function m:Update(offset, shown, total)
+		if total <= shown then self:Hide() return end
+		self:Show()
+		local h = self:GetHeight()
+		local size = math.max(12, h * shown / total)
+		thumb:SetHeight(size)
+		thumb:ClearAllPoints()
+		thumb:SetPoint("TOP", 0, -(h - size) * offset / (total - shown))
+	end
+	m:Hide()
+	return m
+end
+
+-- A small arrow for a sorted column heading, as an inline texture: pointing
+-- down for largest first.
+function S.SortArrow(down)
+	if down then return "|TInterface\\Buttons\\UI-SortArrow:10:10:2:0:16:16:0:9:0:16|t" end
+	return "|TInterface\\Buttons\\UI-SortArrow:10:10:2:0:16:16:0:9:16:0|t"
 end
 
 ---------------------------------------------------------------------------

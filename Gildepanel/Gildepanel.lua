@@ -30,6 +30,10 @@
 -- SkatteverketAPI when it has them, and its pages without a command
 -- (Arbetsorder, Folkvald, Socialbidrag, Kontakta oss) get buttons.
 --
+-- 2.17 tidies the look: the Addons window's tabs are words instead of red
+-- buttons, Fönster groups its buttons, and the panel's Swedbank part is
+-- only as tall as its loans.
+--
 -- 2.15 shows a summary of the day at the account's first login of the day
 -- (/gpanel idag, off with /gpanel dagens).
 --
@@ -47,7 +51,7 @@ local WEEK = 7 * 86400
 local WARN_BEFORE = 3600
 local W, PAD = 300, 14
 local COMPACT_H = 52
-local MOTD_Y, SWEDBANK_H = -370, 114
+local MOTD_Y = -370
 local TICK, GUILD_EVERY, COLLAPSE_DELAY = 0.5, 30, 0.6
 local floor, format = math.floor, string.format
 
@@ -520,6 +524,19 @@ local function Build()
 	body.last = Pair(body, -166, "Senaste insättning")
 	body.pay = Button(body, "Betala skatt", 130, function() RunSlash("SKATTEVERKET", "betala") end)
 	body.pay:SetPoint("TOPLEFT", PAD - 2, -186)
+	-- Greyed out most of the time; say why.
+	if body.pay.SetMotionScriptsWhileDisabled then body.pay:SetMotionScriptsWhileDisabled(true) end
+	body.pay:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+		GameTooltip:AddLine("Betala skatt")
+		if self:IsEnabled() then
+			GameTooltip:AddLine("Betalar det du är skyldig (/skatt betala).", 1, 1, 1, true)
+		elseif self.why then
+			GameTooltip:AddLine(self.why, 1, 1, 1, true)
+		end
+		GameTooltip:Show()
+	end)
+	body.pay:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	local more = Button(body, "Öppna /skatt", 130, function() RunSlash("SKATTEVERKET", "") end)
 	more:SetPoint("TOPRIGHT", -PAD + 2, -186)
 
@@ -543,7 +560,7 @@ local function Build()
 
 	-- Swedbank
 	local swedbank = CreateFrame("Frame", nil, body)
-	swedbank:SetSize(W, SWEDBANK_H)
+	swedbank:SetSize(W, 1)
 	swedbank:SetPoint("TOPLEFT", body.motd, "BOTTOMLEFT", -PAD, -8)
 	Section(swedbank, "Swedbank", 0)
 	body.loans = {}
@@ -551,8 +568,10 @@ local function Build()
 		local value, key = Pair(swedbank, -24 - (i - 1) * 16)
 		body.loans[i] = { key = key, value = value }
 	end
+	-- Placed under the loans shown (see RefreshLoans), so the panel has no
+	-- empty lines at the bottom.
 	local swed = Button(swedbank, "Öppna Swedbank", 140, function() RunSlash("SWEDBANK") end)
-	swed:SetPoint("TOPLEFT", PAD - 2, -78)
+	body.swed, body.swedbankH = swed, 0
 	body.loanNote = swedbank:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 	body.loanNote:SetPoint("LEFT", swed, "RIGHT", 10, 0)
 
@@ -589,7 +608,7 @@ local function FitHeight()
 	if expanded then
 		-- The font string has no fixed height, so it is always as tall as its text.
 		local text = math.max(frame.body.motd:GetStringHeight() or 0, 12)
-		height = -MOTD_Y + text + 8 + SWEDBANK_H
+		height = -MOTD_Y + text + 8 + frame.body.swedbankH
 	end
 	if math.abs(frame:GetHeight() - height) > 0.5 then frame:SetHeight(height) end
 end
@@ -621,6 +640,7 @@ local function RefreshTax(s)
 		body.rate:SetText("")
 		for _, fs in ipairs({ body.owed, body.income, body.paid, body.last }) do fs:SetText("-") end
 		body.pay:Disable()
+		body.pay.why = nil
 		body.reg.text:SetText("")
 		return
 	end
@@ -645,6 +665,7 @@ local function RefreshTax(s)
 	body.paid:SetText(Money(c.paid))
 	body.last:SetText(c.lastDeposit and date("%d/%m %H:%M", c.lastDeposit) or "aldrig")
 	if bankOpen and s.owed >= 1 then body.pay:Enable() else body.pay:Disable() end
+	body.pay.why = s.owed < 1 and "Du är inte skyldig något just nu." or "Öppna gillebanken för att betala."
 end
 
 local function RefreshGuild()
@@ -668,6 +689,17 @@ local function RefreshGuild()
 	body.motd:SetText(motd ~= "" and ("|cffbfbfbfMeddelande:|r |cff40c0ff" .. motd .. "|r") or "|cff808080Inget gildemeddelande.|r")
 end
 
+-- The Swedbank button under the n loan lines in use (at least one, for
+-- "Inga lån igång."), and the section's height to match.
+local function PlaceSwedbankButton(n)
+	local body = frame.body
+	n = math.max(n, 1)
+	local y = -24 - n * 16 - 6
+	body.swed:ClearAllPoints()
+	body.swed:SetPoint("TOPLEFT", PAD - 2, y)
+	body.swedbankH = -y + 22 + 8
+end
+
 -- An offer waiting for your answer first, as in Swedbank's own list.
 local LOAN_ORDER = { offered = 1, approved = 2, accepted = 3, pending = 4, sending = 5 }
 
@@ -680,6 +712,7 @@ local function RefreshLoans()
 	if not c then
 		body.loans[1].key:SetText("Swedbank är inte på.")
 		body.loanNote:SetText("")
+		PlaceSwedbankButton(1)
 		return
 	end
 	local open, closed = {}, 0
@@ -692,6 +725,7 @@ local function RefreshLoans()
 		return (a.appliedAt or 0) > (b.appliedAt or 0)
 	end)
 	if #open == 0 then body.loans[1].key:SetText("Inga lån igång.") end
+	PlaceSwedbankButton(math.min(#open, #body.loans))
 	local total = 0
 	for i, loan in ipairs(open) do
 		local due = DueNow(loan)
@@ -898,13 +932,10 @@ local WINDOWS = {
 	{ "Skatteverket", "Socialbidrag", page = "bidrag" },
 	{ "Skatteverket", "Kontakta oss", page = "contact" },
 	{ "Swedbank", "Swedbank", "SWEDBANK" },
-	{ "Arbetsformedlingen", "Uppdrag", "ARBETSFORMEDLINGEN" },
-	{ "Arbetsformedlingen", "Platsbanken", "PLATSBANKEN" },
-	{ "Skolverket", "Cooldowns", "SKOLVERKET" },
 	{ "Eniro", "Eniro", "ENIRO" },
 	{ "Polisen", "Polisen", "POLISEN" },
 	{ "SCB", "SCB", "SCB" },
-	{ "Dodsannonser", "Dödsannonser", "DODSANNONSER" },
+	{ "Konsumentverket", "Konsumentverket", "KONSUMENTVERKET" },
 }
 
 -- invert: the addon stores "quiet", the box shows the opposite.
@@ -912,6 +943,9 @@ local WINDOWS = {
 -- swatch: a color square after the label showing db[swatch.key] ({ r, g, b },
 -- swatch.default until saved); clicking it runs swatch.slash (a color picker).
 -- tab: which of the window's TABS the group is on.
+-- under: the key of an item in the same group this one belongs to; it is
+-- indented and greyed out while that one is off.
+-- tip: a tooltip for the box.
 local SETTINGS = {
 	{ addon = "Atervinningscentralen", tab = "game", title = "Återvinningscentralen", db = "AtervinningscentralenDB", items = {
 		{ key = "sell", label = "Sälj grått hos handlare", default = true },
@@ -941,26 +975,32 @@ local SETTINGS = {
 		{ key = "alarm", label = "Varning på skärmen och ljud", default = true },
 		{ key = "quiet", label = "Visa andras observationer", invert = true },
 	} },
-	{ addon = "Arbetsformedlingen", tab = "quests", title = "Arbetsförmedlingen", db = "ArbetsformedlingenCharDB", items = {
-		{ key = "quiet", label = "Visa nya annonser i chatten", invert = true },
-	} },
 	-- trackerMode is "zone" or nil; any value counts as checked.
 	{ addon = "QuestLogSort", tab = "quests", title = "QuestLogSort", db = "QuestLogSortDB", items = {
 		{ key = "disabled", label = "Sortera questlogg och tracker", invert = true, slash = { "QUESTLOGSORT", "på", "av" } },
 		{ key = "trackerMode", label = "Trackern zon för zon", slash = { "QUESTLOGSORT", "zon", "nivå" } },
 	} },
+	-- 2.17: "Färga namnen" is the main switch with the two colors under it,
+	-- and "Gillets namn över huvudet" (/bv gillenamn) left the window, since
+	-- Namnskyltar puts the guild under the names too.
 	{ addon = "Bolagsverket", tab = "guild", title = "Bolagsverket", db = "BolagsverketDB", items = {
-		{ key = "color", label = "Färg på gruppens namn", default = true, slash = { "BOLAGSVERKET", "färg" } },
-		{ key = "custom", label = "Egen färg istället för klassfärg", default = true, slash = { "BOLAGSVERKET", "egen" },
+		{ key = "color", label = "Färga namnen", default = true, slash = { "BOLAGSVERKET", "färg" },
+			tip = "Namnen på gruppramarna och namnskyltarna. Av: spelets egna färger." },
+		{ key = "custom", label = "Gruppen i egen färg", default = true, slash = { "BOLAGSVERKET", "egen" }, under = "color",
+			tip = "Av: klassfärger. Klicka på rutan för att välja färg.",
 			swatch = { key = "partyColor", slash = { "BOLAGSVERKET", "välj" }, default = { r = 0.67, g = 0.67, b = 1 } } },
-		{ key = "guildCustom", label = "Egen färg för gillemedlemmar", default = true, slash = { "BOLAGSVERKET", "gillefärg" },
+		{ key = "guildCustom", label = "Gillet i egen färg", default = true, slash = { "BOLAGSVERKET", "gillefärg" }, under = "color",
+			tip = "Gillemedlemmar har den här färgen var de än är. Av: som gruppen. Klicka på rutan för att välja färg.",
 			swatch = { key = "guildColor", slash = { "BOLAGSVERKET", "välj gille" }, default = { r = 0.25, g = 1, b = 0.25 } } },
 		{ key = "icon", label = "Blixt vid gillemedlemmar", default = true, slash = { "BOLAGSVERKET", "gille" } },
-		{ key = "guildTitle", label = "Gillets namn över huvudet", default = true, slash = { "BOLAGSVERKET", "gillenamn" } },
-		{ key = "plates", label = "Namnskyltar: färg, blixt och gille över spelare", slash = { "BOLAGSVERKET", "namnskyltar" } },
+		{ key = "plates", label = "Namnskyltar över spelare", slash = { "BOLAGSVERKET", "namnskyltar" },
+			tip = "Visar vänliga spelares namn som namnskyltar, så att de också får färg, blixt och <Gille> under namnet. Den andra fraktionen blir röd. Inte i instanser." },
 	} },
 	{ addon = "Eniro", tab = "guild", title = "Eniro", db = "EniroCharDB", items = {
 		{ key = "share", label = "Dela min position med gillet", slash = { "ENIRO", "dela" } },
+	} },
+	{ addon = "Konsumentverket", tab = "game", title = "Konsumentverket", db = "KonsumentverketDB", items = {
+		{ key = "auto", label = "Öppna bredvid yrkesfönstret", default = true },
 	} },
 	{ addon = "FrokenUr", tab = "game", title = "Fröken Ur", db = "FrokenUrDB", items = {
 		{ key = "on", label = "Tid på nedkylningarna", default = true, slash = { "FROKENUR", "på", "av" } },
@@ -971,7 +1011,6 @@ local SETTINGS = {
 		{ key = "celebrateQuiet", label = "Med ljud", invert = true },
 		{ key = "daily", label = "Dagens sammanfattning vid första inloggningen", default = true },
 		{ key = "compact", label = "Kompakt rad tills musen är över", default = true, slash = { "GILDEPANEL", "kompakt" } },
-		{ key = "hideMinimap", label = "Visa minimapknappen", invert = true, default = true, slash = { "GILDEPANEL", "minimap" } },
 		{ key = "locked", label = "Lås panelens plats" },
 		-- Through the command: turning it on saves the tracking you have now.
 		{ key = "keepTracking", label = "Behåll örter/malm-spårning vid inloggning", default = true, slash = { "GILDEPANEL", "spårning" } },
@@ -1020,15 +1059,18 @@ local function RefreshHub()
 	for _, row in ipairs(hub.groups) do
 		local loaded = Loaded(row.group.addon) and type(_G[row.group.db]) == "table"
 		row.header:SetText(row.group.title .. (loaded and "" or "  |cff808080(inte på)|r"))
+		local on = {}
+		for _, cb in ipairs(row.boxes) do on[cb.item.key] = loaded and SettingValue(row.group, cb.item) end
 		for _, cb in ipairs(row.boxes) do
-			cb:SetChecked(loaded and SettingValue(row.group, cb.item))
+			local usable = loaded and (not cb.item.under or on[cb.item.under])
+			cb:SetChecked(on[cb.item.key])
 			if cb.swatch then
 				local t = _G[row.group.db]
 				local c = type(t) == "table" and type(t[cb.item.swatch.key]) == "table" and t[cb.item.swatch.key] or cb.item.swatch.default
-				SetColor(cb.swatch.color, c.r, c.g, c.b, loaded and 1 or 0.3)
-				cb.swatch:SetEnabled(loaded and true or false)
+				SetColor(cb.swatch.color, c.r, c.g, c.b, usable and 1 or 0.3)
+				cb.swatch:SetEnabled(usable and true or false)
 			end
-			if loaded then
+			if usable then
 				cb:Enable()
 				cb.label:SetTextColor(1, 1, 1)
 			else
@@ -1077,60 +1119,75 @@ local function BuildHub()
 
 	-- Tabs (2.13): everything on one page had grown too tall. Each tab is a
 	-- page covering the window, so the same offsets work on all of them.
-	hub.windows, hub.groups, hub.tabs, hub.pages = {}, {}, {}, {}
-	local GAP = 6
-	local tw = (HW - 2 * PAD - GAP * (#TABS - 1)) / #TABS
-	local function ShowTab(key)
-		if not hub.pages[key] then key = TABS[1].key end
-		db.hubTab = key
-		for k, page in pairs(hub.pages) do page:SetShown(k == key) end
-		for _, t in ipairs(hub.tabs) do
-			local on = t.key == key
-			if on then t:LockHighlight() else t:UnlockHighlight() end
-			local fs = t:GetFontString()
-			if on then fs:SetTextColor(1, 0.82, 0) else fs:SetTextColor(0.8, 0.8, 0.8) end
-			t.mark:SetShown(on)
-		end
-	end
-	for i, tab in ipairs(TABS) do
-		local t = Button(hub, tab.label, tw, function() ShowTab(tab.key) end)
-		t.key = tab.key
-		t:SetPoint("TOPLEFT", PAD + (i - 1) * (tw + GAP), top)
-		t.mark = t:CreateTexture(nil, "OVERLAY")
-		SetColor(t.mark, 1, 0.82, 0, 0.9)
-		t.mark:SetHeight(2)
-		t.mark:SetPoint("TOPLEFT", t, "BOTTOMLEFT", 4, -2)
-		t.mark:SetPoint("TOPRIGHT", t, "BOTTOMRIGHT", -4, -2)
-		table.insert(hub.tabs, t)
+	-- 2.17: the tabs are words with a gold line under the chosen one
+	-- (Statskontoret.Tabs), so they no longer look like the buttons below.
+	hub.windows, hub.groups, hub.pages = {}, {}, {}
+	local specs = {}
+	for _, tab in ipairs(TABS) do
+		table.insert(specs, { tab.key, tab.label })
 		local page = CreateFrame("Frame", nil, hub)
 		page:SetAllPoints()
 		hub.pages[tab.key] = page
 	end
-	local line = hub:CreateTexture(nil, "ARTWORK")
-	SetColor(line, 1, 0.82, 0, 0.25)
-	line:SetHeight(1)
-	line:SetPoint("TOPLEFT", PAD, top - 28)
-	line:SetPoint("TOPRIGHT", -PAD, top - 28)
-	local first = top - 40
+	local tabs
+	local function ShowTab(key)
+		if not hub.pages[key] then key = TABS[1].key end
+		db.hubTab = key
+		for k, page in pairs(hub.pages) do page:SetShown(k == key) end
+		tabs:Select(key)
+	end
+	tabs = Statskontoret.Tabs(hub, specs, ShowTab, (HW - 2 * PAD) / #TABS)
+	tabs:SetPoint("TOPLEFT", PAD, top - 2)
+	Statskontoret.Rule(hub, PAD, PAD, top - 26, 0.25)
+	local first = top - 38
 	local lowest = first
 
-	-- Fönster: four buttons a row.
+	-- Fönster: four buttons a row, Skatteverket's pages and then the guild's
+	-- own windows (2.17), each under its heading. The tooltip names the
+	-- command that opens the same window.
 	local page = hub.pages.windows
 	local PER_ROW = 4
 	local bw = (HW - 2 * PAD - 8 * (PER_ROW - 1)) / PER_ROW
 	local y = first
-	for i, w in ipairs(WINDOWS) do
+	local function WindowTip(self)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+		GameTooltip:AddLine(self.label)
+		local cmd = self.key and _G["SLASH_" .. self.key .. "1"]
+		if not Loaded(self.addon) then
+			GameTooltip:AddLine(self.addon .. " är inte på.", 0.6, 0.6, 0.6)
+		elseif cmd then
+			GameTooltip:AddLine("Samma som " .. cmd .. (self.arg and (" " .. self.arg) or ""), 1, 1, 1)
+		elseif self.page then
+			GameTooltip:AddLine("En sida i Skatteverket", 1, 1, 1)
+		end
+		GameTooltip:Show()
+	end
+	local heading
+	local col = 0
+	for _, w in ipairs(WINDOWS) do
+		local group = w[1] == "Skatteverket" and "Skatteverket" or "Våra addons"
+		if group ~= heading then
+			if col > 0 then y = y - 26 end
+			if heading then y = y - 8 end
+			heading, col = group, 0
+			Section(page, group, y)
+			y = y - 24
+		end
 		local b = Button(page, w[2], bw, function()
 			if not w.page then RunSlash(w[3], w[4] or "", w[2]) return end
 			local api = API()
 			if api and api.Toggle then api.Toggle(w.page) else Print("Skatteverket är inte på.") end
 		end)
-		b.addon, b.key, b.page = w[1], w[3], w.page
-		local col = (i - 1) % PER_ROW
+		b.addon, b.key, b.page, b.label, b.arg = w[1], w[3], w.page, w[2], w[4]
+		if b.SetMotionScriptsWhileDisabled then b:SetMotionScriptsWhileDisabled(true) end
+		b:SetScript("OnEnter", WindowTip)
+		b:SetScript("OnLeave", function() GameTooltip:Hide() end)
 		b:SetPoint("TOPLEFT", PAD + col * (bw + 8), y)
-		if col == PER_ROW - 1 or i == #WINDOWS then y = y - 26 end
+		col = col + 1
+		if col == PER_ROW then y, col = y - 26, 0 end
 		table.insert(hub.windows, b)
 	end
+	if col > 0 then y = y - 26 end
 	lowest = math.min(lowest, y)
 
 	-- Spelet starts with the camera distance.
@@ -1142,7 +1199,7 @@ local function BuildHub()
 	y = y - 18
 	local slider = CreateFrame("Slider", nil, page)
 	slider:SetOrientation("HORIZONTAL")
-	slider:SetSize(HW - 2 * PAD - 70, 14)
+	slider:SetSize(HW - 2 * PAD - 90, 14)
 	slider:SetPoint("TOPLEFT", PAD + 2, y)
 	slider:SetMinMaxValues(CAMERA_MIN, CAMERA_MAX)
 	slider:SetValueStep(0.1)
@@ -1185,7 +1242,7 @@ local function BuildHub()
 	slider:SetScript("OnMouseWheel", function(self, delta)
 		self:SetValue(self:GetValue() + delta * 0.1)
 	end)
-	local reset = Button(page, "Standard", 62, function()
+	local reset = Button(page, "Standard", 80, function()
 		db.cameraMax = nil
 		SetCamera(DefaultCamera())
 		hub.camera()
@@ -1231,8 +1288,18 @@ local function BuildHub()
 			for _, item in ipairs(group.items) do
 				local cb = CreateFrame("CheckButton", nil, pg, "UICheckButtonTemplate")
 				cb:SetSize(22, 22)
-				cb:SetPoint("TOPLEFT", x + 4, gy + 3)
+				cb:SetPoint("TOPLEFT", x + 4 + (item.under and 18 or 0), gy + 3)
 				cb.item = item
+				if item.tip then
+					if cb.SetMotionScriptsWhileDisabled then cb:SetMotionScriptsWhileDisabled(true) end
+					cb:SetScript("OnEnter", function(self)
+						GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+						GameTooltip:AddLine(item.label)
+						GameTooltip:AddLine(item.tip, 1, 1, 1, true)
+						GameTooltip:Show()
+					end)
+					cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
+				end
 				cb.label = Text(pg, "GameFontHighlightSmall", "LEFT", cb, "RIGHT", 2, 1)
 				cb.label:SetText(item.label)
 				if item.swatch then
@@ -1629,8 +1696,8 @@ end
 ------------------------------------------------------------------------
 -- Dagens sammanfattning (2.15): on the account's first login of the day, a
 -- window with your tax, your loans, the guild's news since the last one
--- (who joined, left or levelled, obituaries, police reports) and your
--- profession cooldowns. /gpanel idag shows it again; /gpanel dagens turns
+-- (who joined, left or levelled, obituaries, police reports). 2.16 drops
+-- the profession cooldowns (Skolverket 0.6 no longer keeps them). /gpanel idag shows it again; /gpanel dagens turns
 -- it off (db.daily = false). Each one saves a roster snapshot (name ->
 -- level) in db.dailyLast for the next; db.dailyPrev is the one today's was
 -- compared with, so showing it again later in the day gives the same news,
@@ -1768,34 +1835,6 @@ local function DailyNews(add, prev)
 	end
 end
 
--- Your own profession cooldowns, as Skolverket saw them last.
-local function DailyCooldowns(add)
-	local c, names = SkolverketCharDB, SkolverketDB and SkolverketDB.names or {}
-	if type(c) ~= "table" or type(c.cds) ~= "table" then return end
-	local ready, nextAt, nextName, now = {}, nil, nil, time()
-	for _, p in pairs(c.cds) do
-		for key, at in pairs(type(p) == "table" and p.keys or {}) do
-			local name = names[key]
-			if not name and C_Spell and C_Spell.GetSpellName and key:sub(1, 1) ~= "i" then
-				name = C_Spell.GetSpellName(tonumber(key:sub(2)) or 0)
-			end
-			name = name or key
-			if at <= now then
-				ready[name] = true
-			elseif not nextAt or at < nextAt then
-				nextAt, nextName = at, name
-			end
-		end
-	end
-	local list = {}
-	for name in pairs(ready) do table.insert(list, name) end
-	if #list > 0 then
-		add("|cff40ff40Redo att tillverka:|r " .. NameList(list))
-	elseif nextAt then
-		add(format("|cffffd100Nedkylning:|r %s om %s", nextName, Duration(nextAt - now)))
-	end
-end
-
 local function DailyText(prev)
 	local lines = {}
 	local function add(text) table.insert(lines, text) end
@@ -1807,7 +1846,6 @@ local function DailyText(prev)
 	local start = #lines
 	DailyTax(add)
 	DailyLoans(add)
-	DailyCooldowns(add)
 	if #lines > start then add(" ") end
 	local levels = RosterLevels()
 	DailyGuild(add, levels, prev)

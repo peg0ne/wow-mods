@@ -1,0 +1,11 @@
+## Interface: 16001
+## Title: Konsumentverket
+## Category: THÖNDERSTÖRM
+## IconTexture: Interface\Icons\INV_Misc_Coin_04
+## Notes: What your crafts are worth at a vendor, for levelling a profession cheaply: for every recipe you know, what the reagents cost to buy (the cheaper of the vendor prices it notes at merchants and the auction house through Auctionator), what a vendor pays for the result after Skatteverket's tax, and the profit, best first. Opens beside the profession window; /konsument anywhere.
+## Version: 0.1.1
+## Dependencies: Statskontoret
+## OptionalDeps: Skatteverket, Bokforing, Auctionator
+## SavedVariables: KonsumentverketDB
+Core.lua
+Window.lua

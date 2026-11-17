@@ -1,6 +1,6 @@
 -- Eniro, the /eniro window, in the style of Skatteverket's panel: online
 -- guild members, same zone first, then nearest and closest in level.
--- Filters: everyone, my zone, my level (±5). Click a row to select it,
+-- Filters (tabs at the top): everyone, my zone, my level (±5). Click a row to select it,
 -- then whisper or invite. The box at the bottom turns position sharing on.
 
 local _, ns = ...
@@ -44,7 +44,7 @@ local function DistanceCell(row)
 	if row.distance then return ns.DistanceText(row.distance) end
 	if row.pos then return "|cff999999delar, annan kontinent|r" end
 	if row.sameZone then return "|cff40ff40samma zon|r" end
-	return ""
+	return "|cff666666-|r"
 end
 
 local function SetFilter(filter)
@@ -58,20 +58,24 @@ local function Build()
 	-- Below the portrait and title bar; buttons in the strip under the inset.
 	local dy, bottom, left = classic and -12 or 0, classic and 4 or 18, classic and 66 or 24
 
-	frame.heading = Text(frame, "GameFontNormal", "TOPLEFT", left, -34)
-	frame.heading:SetText("Var är gillet?")
+	-- The filters as tabs beside the portrait, where the other windows have
+	-- their heading.
+	frame.filters = Statskontoret.Tabs(frame, FILTERS, SetFilter)
+	frame.filters:SetPoint("TOPLEFT", left - 4, -28)
 
 	local x = 24
 	for c = 1, #COLS do
 		Text(frame, "GameFontNormalSmall", "TOPLEFT", x, -56 + dy):SetText(HEADER[c])
 		x = x + COLS[c]
 	end
+	Statskontoret.Rule(frame, 20, 20, -68 + dy, 0.2)
 
 	for i = 1, ROWS do
 		local row = CreateFrame("Button", nil, frame)
 		row:SetSize(WIDTH - 40, ROW_H)
 		row:SetPoint("TOPLEFT", 20, -70 + dy - (i - 1) * ROW_H)
 		row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+		Statskontoret.Stripe(row, i)
 		row.cells = {}
 		local cx = 4
 		for c = 1, #COLS do
@@ -89,6 +93,10 @@ local function Build()
 		end)
 		rows[i] = row
 	end
+
+	frame.scroll = Statskontoret.ScrollMark(frame)
+	frame.scroll:SetPoint("TOPRIGHT", -12, -72 + dy)
+	frame.scroll:SetHeight(ROWS * ROW_H - 4)
 
 	frame.count = Text(frame, "GameFontDisableSmall", "TOPLEFT", 24, -366 + dy)
 	frame.count:SetWidth(WIDTH - 48)
@@ -119,14 +127,6 @@ local function Build()
 
 	local refresh = Button(frame, "Uppdatera", 100, function() ns.Ask() ns.RefreshWindow() end)
 	refresh:SetPoint("BOTTOMLEFT", 24, bottom)
-	frame.filters = {}
-	local tx = refresh
-	for _, spec in ipairs(FILTERS) do
-		local b = Button(frame, spec[2], 120, function() SetFilter(spec[1]) end)
-		b:SetPoint("LEFT", tx, "RIGHT", 8, 0)
-		frame.filters[spec[1]] = b
-		tx = b
-	end
 
 	frame:EnableMouseWheel(true)
 	frame:SetScript("OnMouseWheel", function(_, delta)
@@ -147,9 +147,7 @@ end
 function ns.RefreshWindow()
 	if not frame or not frame:IsShown() then return end
 	local filter = ns.char.filter
-	for key, b in pairs(frame.filters) do
-		if key == filter then b:Disable() else b:Enable() end
-	end
+	frame.filters:Select(filter)
 	frame.share:SetChecked(ns.Sharing())
 	list = ns.Rows(filter)
 	local stillThere = false
@@ -177,6 +175,7 @@ function ns.RefreshWindow()
 	act.label:SetText(selected and ("Valt: " .. selected) or "Klicka på en medlem för att viska eller bjuda in.")
 	if selected then act.whisper:Enable() act.invite:Enable() else act.whisper:Disable() act.invite:Disable() end
 
+	frame.scroll:Update(offset, ROWS, #list)
 	local sharing = 0
 	for _ in pairs(ns.positions) do sharing = sharing + 1 end
 	if #list == 0 then

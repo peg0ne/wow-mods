@@ -10,15 +10,15 @@ exclude_files = { ".git", "tools" }
 
 -- Globals the addons own: SavedVariables, slash commands, library tables.
 globals = {
-	"ApiProbeBlocked", "ApiProbeDB", "BolagsverketDB", "SLASH_BOLAGSVERKET1", "SLASH_BOLAGSVERKET2", "ArbetsformedlingenCharDB", "AtervinningscentralenDB",
-	"DodsannonserDB", "EniroCharDB", "FrokenUrDB", "SLASH_FROKENUR1", "SLASH_FROKENUR2", "GildepanelDB", "HandlaggarenDB", "KolappDB", "PolisenDB",
+	"ApiProbeBlocked", "ApiProbeDB", "BolagsverketDB", "SLASH_BOLAGSVERKET1", "SLASH_BOLAGSVERKET2", "AtervinningscentralenDB",
+	"DodsannonserDB", "EniroCharDB", "KonsumentverketDB", "SLASH_KONSUMENTVERKET1", "SLASH_KONSUMENTVERKET2", "FrokenUrDB", "SLASH_FROKENUR1", "SLASH_FROKENUR2", "GildepanelDB", "HandlaggarenDB", "KolappDB", "PolisenDB",
 	"PostnordDB", "Rattsmedicinalverket", "RattsmedicinalverketDB",
-	"SCBCharDB", "Statskontoret", "SCBDB", "SLASH_APIPROBE1", "SLASH_ARBETSFORMEDLINGEN1", "SLASH_ARBETSFORMEDLINGEN2",
+	"SCBCharDB", "Statskontoret", "SCBDB", "SLASH_APIPROBE1",
 	"SLASH_ATERVINNING1", "SLASH_ATERVINNING2", "SLASH_DODSANNONSER1", "SLASH_DODSANNONSER2",
 	"SLASH_DODSANNONSER3", "SLASH_ENIRO1", "SLASH_ENIRO2", "SLASH_GILDEPANEL1", "SLASH_GILDEPANEL2",
-	"SLASH_HANDLAGGAREN1", "SLASH_HANDLAGGAREN2", "SLASH_KOLAPP1", "SLASH_PLATSBANKEN1",
+	"SLASH_HANDLAGGAREN1", "SLASH_HANDLAGGAREN2", "SLASH_KOLAPP1",
 	"SLASH_POLISEN1", "SLASH_POLISEN2", "SLASH_POSTNORD1", "SLASH_QUESTLOGSORT1", "SLASH_QUESTLOGSORT2", "QuestLogSortDB", "QuestLogSortCharDB",
-	"SLASH_SCB1", "SLASH_SCB2", "SLASH_SKOLVERKET1", "SLASH_SKOLVERKET2", "SkolverketCharDB",
+	"SLASH_SCB1", "SLASH_SCB2", "SkolverketCharDB",
 	"SkolverketDB", "SlashCmdList",
 	-- Opening the color picker sets its fields (Bolagsverket).
 	"ColorPickerFrame",
@@ -28,7 +28,8 @@ globals = {
 -- clients (see "The Forever client" in README.md).
 read_globals = {
 	"GetServerTime", "GossipFrame", "InCombatLockdown", "QuestFrame",
-	"AcceptQuest", "Ambiguate", "BackdropTemplateMixin", "BokforingFrame",
+	"AcceptQuest", "Ambiguate", "BackdropTemplateMixin", "BokforingFrame", "BokforingDB", "Auctionator",
+	"GetMerchantNumItems", "GetMerchantItemID", "GetMerchantItemInfo", "C_MerchantFrame", "GetItemCount", "ProfessionsFrame", "TradeSkillFrame",
 	"COMBATLOG_OBJECT_REACTION_HOSTILE", "COMBATLOG_OBJECT_TYPE_GUARDIAN", "CompactUnitFrame_UpdateName", "PartyFrame", "UnitInParty", "UnitInRaid", "UnitIsInMyGuild", "UnitIsUnit",
 	"COMBATLOG_OBJECT_TYPE_PET", "COMBATLOG_OBJECT_TYPE_PLAYER", "COMBATLOG_XPGAIN_FIRSTPERSON",
 	"C_AddOns", "C_CVar", "C_ChatInfo", "C_Container", "C_DeathRecap", "C_EventUtils", "C_GossipInfo",

@@ -3,5 +3,5 @@
 ## Category: THÖNDERSTÖRM
 ## IconTexture: Interface\Icons\INV_Misc_Gear_02
 ## Notes: Shared code for the THÖNDERSTÖRM addons: windows, guild messages, roster requests, invites and class colors. It shows nothing itself; the other addons need it.
-## Version: 0.1
+## Version: 0.2
 Core.lua
