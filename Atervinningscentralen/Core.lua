@@ -3,7 +3,9 @@
 -- stops the moment the vendor closes (using an item away from a vendor
 -- would equip or use it instead of selling it). Repairs come after the
 -- sales, so the junk money helps pay for them.
--- Hold Shift while opening a vendor to skip everything. /avc for settings.
+-- Hold Shift while opening a vendor to skip selling and repairing.
+-- Since 0.3 it also opens your bags at a vendor or the bank, and closes the
+-- ones it opened when you leave. /avc for settings.
 --
 -- Skatteverket counts gold gained while a vendor is open as income, so the
 -- gray sales are taxed exactly like selling by hand. Repairs are not income.
@@ -11,9 +13,10 @@
 local BATCH = 6          -- items sold per tick
 local INTERVAL = 0.2     -- seconds between ticks
 
-local defaults = { sell = true, repair = true }
+local defaults = { sell = true, repair = true, bags = true }
 local db
 local merchantOpen = false
+local bankOpen = false
 local ticker, queue, sold
 
 local function Print(text)
@@ -153,6 +156,41 @@ local function OnMerchantShow()
 	end)
 end
 
+-- Bags: open every bag at a vendor or the bank and remember which were
+-- closed before, so leaving closes only those and keeps the ones you had open.
+-- Baganator opens its own bags at vendors and the bank (its Auto Open
+-- settings) and replaces the game's bag frames, so with it loaded we leave
+-- the bags alone.
+local openedBags   -- bag IDs we opened, or nil when we opened none
+
+local function BaganatorLoaded()
+	if C_AddOns and C_AddOns.IsAddOnLoaded then return C_AddOns.IsAddOnLoaded("Baganator") end
+	return IsAddOnLoaded and IsAddOnLoaded("Baganator")
+end
+
+local function OpenBags()
+	if not db.bags or openedBags or BaganatorLoaded() then return end
+	-- After the game's own handling, which may open the backpack itself.
+	C_Timer.After(0, function()
+		if openedBags or not (merchantOpen or bankOpen) then return end
+		local closed = {}
+		for bag = 0, NUM_BAG_SLOTS or 4 do
+			if (NumSlots(bag) or 0) > 0 and not IsBagOpen(bag) then table.insert(closed, bag) end
+		end
+		if #closed == 0 then return end
+		openedBags = closed
+		OpenAllBags()
+	end)
+end
+
+local function CloseBags()
+	if merchantOpen or bankOpen or not openedBags then return end
+	for _, bag in ipairs(openedBags) do
+		if IsBagOpen(bag) then CloseBag(bag) end
+	end
+	openedBags = nil
+end
+
 -- /avc test: what would be sold, without a vendor.
 local function Test()
 	local junk = FindJunk()
@@ -169,8 +207,9 @@ local function Test()
 end
 
 local function Status()
-	Print(string.format("sälja grått: %s, laga: %s. Håll Shift när du öppnar en handlare för att hoppa över.",
-		db.sell and "på" or "av", db.repair and "på" or "av"))
+	Print(string.format("sälja grått: %s, laga: %s, öppna väskorna: %s. Håll Shift när du öppnar en handlare för att hoppa över försäljning och lagning.",
+		db.sell and "på" or "av", db.repair and "på" or "av",
+		BaganatorLoaded() and "Baganator sköter det" or (db.bags and "på" or "av")))
 end
 
 SLASH_ATERVINNING1 = "/avc"
@@ -181,11 +220,13 @@ SlashCmdList.ATERVINNING = function(msg)
 		db.sell = not db.sell
 	elseif msg == "laga" then
 		db.repair = not db.repair
+	elseif msg == "väskor" or msg == "vaskor" then
+		db.bags = not db.bags
 	elseif msg == "test" then
 		Test()
 		return
 	elseif msg ~= "" then
-		Print("/avc visar inställningarna, /avc sälj slår på eller av försäljning, /avc laga slår på eller av lagning, /avc test visar vad som skulle säljas.")
+		Print("/avc visar inställningarna, /avc sälj slår på eller av försäljning, /avc laga slår på eller av lagning, /avc väskor slår på eller av att väskorna öppnas hos handlare och på banken, /avc test visar vad som skulle säljas.")
 		return
 	end
 	Status()
@@ -195,6 +236,8 @@ local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("MERCHANT_SHOW")
 frame:RegisterEvent("MERCHANT_CLOSED")
+frame:RegisterEvent("BANKFRAME_OPENED")
+frame:RegisterEvent("BANKFRAME_CLOSED")
 frame:SetScript("OnEvent", function(_, event, arg1)
 	if event == "ADDON_LOADED" and arg1 == "Atervinningscentralen" then
 		AtervinningscentralenDB = AtervinningscentralenDB or {}
@@ -205,8 +248,16 @@ frame:SetScript("OnEvent", function(_, event, arg1)
 	elseif event == "MERCHANT_SHOW" then
 		merchantOpen = true
 		OnMerchantShow()
+		OpenBags()
 	elseif event == "MERCHANT_CLOSED" then
 		merchantOpen = false
 		if ticker then Finish() end
+		CloseBags()
+	elseif event == "BANKFRAME_OPENED" then
+		bankOpen = true
+		OpenBags()
+	elseif event == "BANKFRAME_CLOSED" then
+		bankOpen = false
+		CloseBags()
 	end
 end)

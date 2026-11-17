@@ -954,6 +954,8 @@ local SETTINGS = {
 	{ addon = "Atervinningscentralen", tab = "game", title = "Återvinningscentralen", db = "AtervinningscentralenDB", items = {
 		{ key = "sell", label = "Sälj grått hos handlare", default = true },
 		{ key = "repair", label = "Laga utrustningen", default = true },
+		{ key = "bags", label = "Öppna väskorna hos handlare och på banken", default = true,
+			tip = "Gör inget om du har Baganator: den öppnar väskorna själv (dess inställning Auto Open)." },
 	} },
 	{ addon = "Handlaggaren", tab = "quests", title = "Handläggaren", db = "HandlaggarenDB", items = {
 		{ key = "on", label = "Ta och lämna in uppdrag", default = true },

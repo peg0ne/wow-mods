@@ -2,7 +2,7 @@
 ## Title: Återvinningscentralen
 ## Category: Inventory
 ## IconTexture: Interface\Icons\INV_Misc_Bag_07
-## Notes: Sells your gray items and repairs your gear when you open a vendor. Hold Shift while opening the vendor to skip. /avc for settings.
-## Version: 0.2
+## Notes: Sells your gray items and repairs your gear when you open a vendor. Opens your bags at a vendor or the bank. Hold Shift while opening the vendor to skip selling and repairing. /avc for settings.
+## Version: 0.3
 ## SavedVariables: AtervinningscentralenDB
 Core.lua

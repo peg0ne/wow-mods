@@ -66,7 +66,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 
 | Addon | Version | Status |
 |---|---|---|
-| Atervinningscentralen | 0.2 | Works in game (sells grays, repairs); 0.2 repairs after the money for the grays has arrived |
+| Atervinningscentralen | 0.3 | Works in game (sells grays, repairs); 0.2 repairs after the money for the grays has arrived. 0.3 opens your bags at a vendor or the bank (`/avc väskor`, also in Gildepanel's Addons window); not yet tested in game |
 | Skolverket | 0.6 | Works in game: the item tooltip (reads Skatteverket's recipes). 0.6 drops the guild's cooldown list (`/skola`); not yet tested in game |
 | Eniro | 0.4.1 | Works in game: member list; position sharing needs a second member online to test. 0.4 adds a search box on the world map (zones and guildmates); not yet tested in game. 0.4.1: the filters are tabs at the top, and an unknown distance shows "-" |
 | Rattsmedicinalverket | 0.5 | Works in game (killer, level, ability, position from the Death Recap); 0.4 stops a second "unknown cause" record when `PLAYER_DEAD` fires again for the same death |
@@ -113,6 +113,7 @@ Despite `## Interface: 16001`, the client (version 1.60.1) runs on a current ret
 - Then repairs everything if the vendor can and you can afford it, so the junk money helps pay.
 - Prints "sålde 7 saker för 1g 23s, lagade utrustningen för 45s."
 - Holding Shift while opening the vendor skips everything. `/avc` shows settings, `/avc sälj` and `/avc laga` toggle selling and repairing.
+- Since 0.3, opens every bag at a vendor or the bank (`MERCHANT_SHOW`, `BANKFRAME_OPENED`) and on leaving closes only the bags it opened, so ones you had open stay open. On by default; `/avc väskor` toggles it. Shift doesn't skip it. Does nothing when Baganator is loaded: Baganator has its own Auto Open settings (vendor and bank on by default) and replaces the game's bag frames.
 - Supports both `C_Container` and the older global bag functions, because it's unknown which one this client has.
 - Tax: Skatteverket counts gold gained at an open vendor, so gray sales are taxed exactly like selling by hand. Repairs don't affect the tax.
 - Ideas for later: personal never-sell list, guild-funded repairs, vendor restocking.
