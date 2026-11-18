@@ -966,6 +966,9 @@ local SETTINGS = {
 		{ key = "shared", label = "Ta uppdrag som gruppen delar" },
 		{ key = "repeatable", label = "Ta upprepningsbara uppdrag" },
 		{ key = "announce", label = "Säg till gruppen när ett uppdrag är klart", default = true },
+		-- Through the command: turning it on clears out what is gray already.
+		{ key = "abandonGray", label = "Överge uppdrag som blivit gråa", slash = { "HANDLAGGAREN", "överge" },
+			tip = "När du går upp en nivå och vid inloggning. Aldrig klara uppdrag eller dagliga." },
 	} },
 	{ addon = "Kolapp", tab = "quests", title = "Kölapp", db = "KolappDB", items = {
 		{ key = "chat", label = "Questkedjor i chatten", default = true },
@@ -985,6 +988,8 @@ local SETTINGS = {
 	{ addon = "QuestLogSort", tab = "quests", title = "QuestLogSort", db = "QuestLogSortDB", items = {
 		{ key = "disabled", label = "Sortera questlogg och tracker", invert = true, slash = { "QUESTLOGSORT", "på", "av" } },
 		{ key = "trackerMode", label = "Trackern zon för zon", slash = { "QUESTLOGSORT", "zon", "nivå" } },
+		{ key = "autoFoldOff", label = "Fäll ihop zoner där allt är klart", invert = true, under = "trackerMode",
+			slash = { "QUESTLOGSORT", "klara" } },
 	} },
 	-- 2.17: "Färga namnen" is the main switch with the two colors under it,
 	-- and "Gillets namn över huvudet" (/bv gillenamn) left the window, since

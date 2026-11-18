@@ -27,7 +27,7 @@ globals = {
 -- Game API and UI globals the addons read. Some are only fallbacks for older
 -- clients (see "The Forever client" in README.md).
 read_globals = {
-	"GetServerTime", "GossipFrame", "InCombatLockdown", "QuestFrame",
+	"UnitQuestTrivialLevelRange", "GetQuestGreenRange", "QuestDifficultyColors", "GetServerTime", "GossipFrame", "InCombatLockdown", "QuestFrame",
 	"AcceptQuest", "Ambiguate", "BackdropTemplateMixin", "BokforingFrame", "BokforingDB", "Auctionator", "C_AuctionHouse", "AuctionHouseFrame", "ChatEdit_InsertLink", "GetItemStats", "GetItemInfoInstant", "ITEM_QUALITY_COLORS", "StaticPopup_Show", "OKAY", "CANCEL", "MenuUtil", "ReloadUI",
 	"GetMerchantNumItems", "GetMerchantItemID", "GetMerchantItemInfo", "C_MerchantFrame", "GetItemCount", "ProfessionsFrame", "TradeSkillFrame",
 	"COMBATLOG_OBJECT_REACTION_HOSTILE", "COMBATLOG_OBJECT_TYPE_GUARDIAN", "CompactUnitFrame_UpdateName", "PartyFrame", "UnitInParty", "UnitInRaid", "UnitIsInMyGuild", "UnitIsUnit",

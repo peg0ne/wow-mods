@@ -11,6 +11,9 @@
 -- (Runecloth and other turn-ins that use up items) are left alone unless
 -- /hl upprepade. In a party, says in party chat when one of your quests
 -- has all its objectives done, as Questie does (/hl meddela turns it off).
+-- /hl överge (0.5, off by default) abandons quests that have gone gray:
+-- when you level up and at login, never one that is complete (it can still
+-- be handed in), a daily or weekly, or one in combat. Each is named in chat.
 --
 -- Written for Forever's retail-based client (C_GossipInfo), with the older
 -- quest greeting functions for NPCs that use that window instead.
@@ -24,6 +27,7 @@ local defaults = {
 	shared = false,   -- accept quests a party member shares
 	repeatable = false, -- also pick up repeatable quests (turn-ins that use up items)
 	announce = true,  -- tell the party when a quest's objectives are done
+	abandonGray = false, -- abandon quests that have gone gray (0.5, opt-in)
 }
 
 local db
@@ -276,11 +280,78 @@ local function QueueCheck()
 end
 
 ---------------------------------------------------------------------------
+-- Abandoning gray quests (0.5, /hl överge).
+
+-- Gray as the quest log colors it: more levels under yours than the game's
+-- range for the green ones. Nil when the client can't tell.
+local function IsGray(level, playerLevel)
+	if not level or level <= 0 then return nil end
+	local range = (UnitQuestTrivialLevelRange and UnitQuestTrivialLevelRange("player"))
+		or (GetQuestGreenRange and GetQuestGreenRange("player"))
+	if type(range) == "number" then return level < playerLevel - range end
+	if GetQuestDifficultyColor and QuestDifficultyColors and QuestDifficultyColors.trivial then
+		return GetQuestDifficultyColor(level) == QuestDifficultyColors.trivial
+	end
+	return nil
+end
+
+local function Abandon(questID)
+	local q = C_QuestLog
+	if q and q.SetSelectedQuest and q.SetAbandonQuest and q.AbandonQuest then
+		q.SetSelectedQuest(questID)
+		q.SetAbandonQuest()
+		q.AbandonQuest()
+		return true
+	end
+	return false
+end
+
+local missingWarned = false
+local abandonAfterCombat = false
+-- playerLevel: from PLAYER_LEVEL_UP, which can arrive before UnitLevel has it.
+local function AbandonGray(playerLevel)
+	if not db.abandonGray then return end
+	if InCombatLockdown() then abandonAfterCombat = true return end
+	if not (C_QuestLog and C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetInfo and C_QuestLog.IsComplete) then return end
+	playerLevel = math.max(playerLevel or 0, UnitLevel("player") or 0)
+	local gray = {}
+	for i = 1, C_QuestLog.GetNumQuestLogEntries() do
+		local info = C_QuestLog.GetInfo(i)
+		if info and not info.isHeader and not info.isHidden and info.questID and info.questID > 0
+			and (info.frequency or 0) == 0 and not C_QuestLog.IsComplete(info.questID)
+			and IsGray(info.level, playerLevel) then
+			table.insert(gray, { id = info.questID, title = info.title, level = info.level })
+		end
+	end
+	for _, quest in ipairs(gray) do
+		local link = (GetQuestLink and GetQuestLink(quest.id)) or ("[" .. tostring(quest.title) .. "]")
+		if Abandon(quest.id) then
+			Print(string.format("övergav %s (nivå %d, grått).", link, quest.level))
+		elseif not missingWarned then
+			missingWarned = true
+			Print("klienten kan inte överge uppdrag åt tillägg; /hl överge gör inget här.")
+			return
+		end
+	end
+end
+
+-- Settled: after a level-up the log and your level take a moment.
+local abandonPending = false
+local function QueueAbandon(playerLevel)
+	if abandonPending then return end
+	abandonPending = true
+	C_Timer.After(2, function()
+		abandonPending = false
+		pcall(AbandonGray, playerLevel)
+	end)
+end
+
+---------------------------------------------------------------------------
 
 local events = CreateFrame("Frame")
 for _, event in ipairs({ "ADDON_LOADED", "GOSSIP_SHOW", "QUEST_GREETING", "QUEST_DETAIL",
 	"QUEST_PROGRESS", "QUEST_COMPLETE", "QUEST_ACCEPTED", "GOSSIP_CLOSED", "QUEST_FINISHED",
-	"QUEST_LOG_UPDATE" }) do
+	"QUEST_LOG_UPDATE", "PLAYER_LEVEL_UP", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED" }) do
 	pcall(events.RegisterEvent, events, event)
 end
 
@@ -300,6 +371,17 @@ events:SetScript("OnEvent", function(_, event, ...)
 	elseif event == "QUEST_DETAIL" then OnDetail()
 	elseif event == "QUEST_PROGRESS" then OnProgress()
 	elseif event == "QUEST_LOG_UPDATE" then QueueCheck()
+	elseif event == "PLAYER_LEVEL_UP" then
+		if InCombatLockdown() then abandonAfterCombat = true else QueueAbandon((...)) end
+	elseif event == "PLAYER_ENTERING_WORLD" then
+		-- Login and reload; zoning in and out of instances is no news.
+		local login, reload = ...
+		if login or reload then QueueAbandon() end
+	elseif event == "PLAYER_REGEN_ENABLED" then
+		if abandonAfterCombat then
+			abandonAfterCombat = false
+			QueueAbandon()
+		end
 	elseif event == "QUEST_COMPLETE" then
 		rewardScreen = rewardScreen + 1
 		OnComplete()
@@ -331,6 +413,7 @@ local SETTINGS = {
 	{ "shared", "delade", "ta uppdrag som gruppen delar" },
 	{ "repeatable", "upprepade", "ta upprepningsbara uppdrag" },
 	{ "announce", "meddela", "säg till gruppen när ett uppdrag är klart" },
+	{ "abandonGray", "överge", "överge uppdrag som blivit gråa" },
 }
 
 local function Status()
@@ -351,12 +434,14 @@ SlashCmdList.HANDLAGGAREN = function(msg)
 		Status()
 		return
 	end
-	local aliases = { ["belöning"] = "pickBest", beloning = "pickBest", dela = "share", prat = "gossip", ["grå"] = "trivial", gra = "trivial", delade = "shared", upprepade = "repeatable", meddela = "announce" }
+	local aliases = { ["belöning"] = "pickBest", beloning = "pickBest", dela = "share", prat = "gossip", ["grå"] = "trivial", gra = "trivial", delade = "shared", upprepade = "repeatable", meddela = "announce", ["överge"] = "abandonGray", overge = "abandonGray" }
 	local key = aliases[cmd]
 	if not key then
-		Print("/hl visar inställningarna. /hl av | på, /hl belöning, /hl dela, /hl prat, /hl grå, /hl delade, /hl upprepade, /hl meddela slår av eller på.")
+		Print("/hl visar inställningarna. /hl av | på, /hl belöning, /hl dela, /hl prat, /hl grå, /hl delade, /hl upprepade, /hl meddela, /hl överge slår av eller på.")
 		return
 	end
 	db[key] = not db[key]
 	Status()
+	-- Turned on: clear out what is gray already.
+	if key == "abandonGray" and db[key] then QueueAbandon() end
 end

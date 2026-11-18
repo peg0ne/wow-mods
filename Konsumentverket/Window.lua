@@ -282,6 +282,22 @@ function ns.ProfessionClosed()
 	if frame and auto then frame:Hide() end
 end
 
+-- A button above the profession window, as Bokföring has (0.3): opens the
+-- window beside it, or closes it. Left of Bokföring's when that is loaded.
+local profButton
+function ns.ShowProfessionButton()
+	local pf = ProfessionsFrame or TradeSkillFrame
+	if profButton or not pf then return end
+	profButton = CreateFrame("Button", nil, pf, "UIPanelButtonTemplate")
+	profButton:SetSize(120, 22)
+	local loaded = C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("Bokforing")
+	profButton:SetPoint("BOTTOMRIGHT", pf, "TOPRIGHT", loaded and -94 or 0, 2)
+	profButton:SetText("Konsumentverket")
+	profButton:SetScript("OnClick", function()
+		if frame and frame:IsShown() then frame:Hide() else ns.ShowBesideProfession() end
+	end)
+end
+
 ---------------------------------------------------------------------------
 -- Shopping list (as Bokföring does it): right-click a recipe, say how many
 -- crafts, and the reagents the auction house sells cheapest go into an

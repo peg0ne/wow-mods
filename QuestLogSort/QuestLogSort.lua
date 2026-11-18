@@ -384,6 +384,12 @@ end)
 -- Clicking that watches them again. A quest in a folded zone that gets
 -- watched (a new quest, or the game watching one that made progress) is
 -- folded away with the rest. Folding waits for combat to end.
+--
+-- 1.9: a zone whose watched quests are all complete folds by itself, as
+-- "+ Hillsbrad (7 klara)" in green, so the tracker shows what is left to
+-- do (/qls klara turns it off). Such a zone opens again by itself when a
+-- quest there still needs work (a new one), instead of folding it away.
+-- One you open by hand stays open until it has unfinished quests again.
 local ROW = 16
 local lines = setmetatable({}, { __mode = "k" })   -- our frame -> its zone line frames
 local holders = setmetatable({}, { __mode = "k" }) -- tracker block -> our frame over it
@@ -395,9 +401,15 @@ end
 local function CharDB()
 	QuestLogSortCharDB = QuestLogSortCharDB or {}
 	local c = QuestLogSortCharDB
-	c.collapsed = c.collapsed or {} -- zone name -> true
+	c.collapsed = c.collapsed or {} -- zone name -> true, or "auto" when folded for being finished
 	c.hidden = c.hidden or {}       -- quest ID -> zone name, unwatched by folding
+	c.keepOpen = c.keepOpen or {}   -- zone name -> true: finished, but opened by hand
 	return c
+end
+
+-- Finished zones fold by themselves (1.9; on unless /qls klara).
+local function AutoFoldOn()
+	return not (QuestLogSortDB and QuestLogSortDB.autoFoldOff)
 end
 
 -- Folded zones and how many quests each holds.
@@ -414,11 +426,12 @@ end
 
 local busy = false -- folding or unfolding: our own watch changes
 local QueuePanel -- shows folded zones while the tracker has no quests (below)
-local function Fold(zone)
+local function Fold(zone, auto)
 	local c = CharDB()
 	local zones, names = ZoneOrder()
 	busy = true
-	c.collapsed[zone] = true
+	c.collapsed[zone] = auto and "auto" or true
+	c.keepOpen[zone] = nil
 	for _, id in ipairs(WatchedQuests()) do
 		if names[zones[id]] == zone then
 			c.hidden[id] = zone
@@ -429,10 +442,13 @@ local function Fold(zone)
 	QueuePanel()
 end
 
-local function Unfold(zone)
+-- byHand: you opened it (a click, /qls öppna), so a finished zone isn't
+-- folded straight back.
+local function Unfold(zone, byHand)
 	local c = CharDB()
 	busy = true
 	c.collapsed[zone] = nil
+	if byHand then c.keepOpen[zone] = true end
 	for id, z in pairs(c.hidden) do
 		if z == zone then
 			c.hidden[id] = nil
@@ -452,7 +468,7 @@ local function UnfoldAll()
 	local zones = {}
 	for _, zone in pairs(CharDB().hidden) do zones[zone] = true end
 	for zone in pairs(CharDB().collapsed) do zones[zone] = true end
-	for zone in pairs(zones) do Unfold(zone) end
+	for zone in pairs(zones) do Unfold(zone, true) end
 	QueuePanel()
 end
 
@@ -462,24 +478,63 @@ local function ToggleZone(zone)
 		Say("zonen fälls " .. (CharDB().collapsed[zone] and "ut" or "ihop") .. " när striden är över.")
 		return
 	end
-	if CharDB().collapsed[zone] then Unfold(zone) else Fold(zone) end
+	if CharDB().collapsed[zone] then Unfold(zone, true) else Fold(zone) end
 end
 
--- Watched quests that belong in a folded zone go back into it.
+-- Watched quests that belong in a folded zone go back into it. A zone
+-- folded for being finished opens instead when one of them needs work.
 local function Refold()
 	if busy or not ready or InCombat() or not (Enabled() and ByZone()) then return end
 	local c = CharDB()
 	if not next(c.collapsed) then return end
 	local zones, names = ZoneOrder()
+	local reopen = {}
 	busy = true
 	for _, id in ipairs(WatchedQuests()) do
 		local zone = names[zones[id]]
-		if zone and c.collapsed[zone] then
+		if zone and c.collapsed[zone] == "auto" and not Watch.IsComplete(id) then
+			reopen[zone] = true
+		elseif zone and c.collapsed[zone] and not reopen[zone] then
 			c.hidden[id] = zone
 			Watch.RemoveQuestWatch(id)
 		end
 	end
 	busy = false
+	for zone in pairs(reopen) do Unfold(zone) end
+end
+
+-- Zones whose watched quests are all complete fold up (1.9). A zone that
+-- has unfinished quests again forgets that it was opened by hand.
+local function AutoFold()
+	if busy or not ready or InCombat() or not (Enabled() and ByZone() and AutoFoldOn()) then return end
+	local c = CharDB()
+	local zones, names = ZoneOrder()
+	local finished, seen = {}, {}
+	for _, id in ipairs(WatchedQuests()) do
+		local zone = names[zones[id]]
+		if zone then
+			seen[zone] = true
+			if finished[zone] == nil then finished[zone] = true end
+			if not Watch.IsComplete(id) then finished[zone] = false end
+		end
+	end
+	for zone in pairs(c.keepOpen) do
+		if finished[zone] == false or not seen[zone] then c.keepOpen[zone] = nil end
+	end
+	for zone, done in pairs(finished) do
+		if done and not c.keepOpen[zone] and not c.collapsed[zone] then Fold(zone, true) end
+	end
+end
+
+local autoFoldPending = false
+local function QueueAutoFold()
+	if autoFoldPending then return end
+	autoFoldPending = true
+	-- After the tracker sort and Refold have settled.
+	C_Timer.After(0.5, function()
+		autoFoldPending = false
+		Report(pcall(AutoFold))
+	end)
 end
 
 local foldEvents = CreateFrame("Frame")
@@ -488,8 +543,12 @@ foldEvents:RegisterEvent("QUEST_REMOVED")
 foldEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
 foldEvents:RegisterEvent("PLAYER_ENTERING_WORLD")
 foldEvents:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+foldEvents:RegisterEvent("QUEST_LOG_UPDATE")
 foldEvents:SetScript("OnEvent", function(_, event, id)
 	if not ready then return end
+	QueueAutoFold()
+	-- Progress on a quest: only the auto fold cares.
+	if event == "QUEST_LOG_UPDATE" then return end
 	QueuePanel()
 	if event == "QUEST_REMOVED" then
 		if id then CharDB().hidden[id] = nil end
@@ -508,7 +567,8 @@ foldEvents:SetScript("OnEvent", function(_, event, id)
 	end
 end)
 
--- Folded zones as { name, count, rank }, in tracker order.
+-- Folded zones as { name, count, rank, done }, in tracker order; done when
+-- it folded for being finished.
 local function FoldedRows(names)
 	local rank = {}
 	for i, name in pairs(names) do
@@ -517,7 +577,8 @@ local function FoldedRows(names)
 	end
 	local rows = {}
 	for zone, count in pairs(Folded()) do
-		rows[#rows + 1] = { name = zone, count = count, rank = rank[zone] or math.huge }
+		rows[#rows + 1] = { name = zone, count = count, rank = rank[zone] or math.huge,
+			done = CharDB().collapsed[zone] == "auto" }
 	end
 	table.sort(rows, function(a, b)
 		if a.rank ~= b.rank then return a.rank < b.rank end
@@ -572,9 +633,11 @@ local function ZoneLine(owner, i)
 end
 
 -- The text sets the line's width, so it can hug the tracker from either side.
-local function ShowLine(line, zone, count, justify)
+local function ShowLine(line, zone, count, justify, done)
 	line.zone = zone
-	if count then
+	if count and done then
+		line.text:SetText("+ " .. zone .. " |cff40ff40(" .. count .. " klara)|r")
+	elseif count then
 		line.text:SetText("+ " .. zone .. " |cffa0a0a0(" .. count .. ")|r")
 	else
 		line.text:SetText("- " .. zone)
@@ -627,7 +690,7 @@ local function UpdatePanel()
 		local line = ZoneLine(panel, i)
 		line:ClearAllPoints()
 		line:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -ROW * (i - 1))
-		ShowLine(line, row.name, row.count)
+		ShowLine(line, row.name, row.count, nil, row.done)
 	end
 	panel:Show()
 end
@@ -665,13 +728,43 @@ local function LeftSide(block)
 	return not left or left * tracker:GetEffectiveScale() > 200
 end
 
+-- How far the block's own buttons stick out on the side the zone lines are
+-- on (1.8.1): the quest's round POI button (or an item button) hangs off the
+-- block's edge, level with its title, and covered the end of the zone name.
+-- In the block's units, capped so a stray wide child can't push it far off.
+local GUTTER_MAX = 40
+local function Gutter(block, left)
+	local scale = block:GetEffectiveScale()
+	local edge = left and block:GetLeft() or block:GetRight()
+	if not edge or not scale or scale <= 0 then return 0 end
+	edge = edge * scale
+	local out = 0
+	local kids = { block:GetChildren() }
+	for _, key in ipairs({ "poiButton", "POIButton", "itemButton", "ItemButton" }) do
+		local f = rawget(block, key)
+		if type(f) == "table" and f.GetLeft then kids[#kids + 1] = f end
+	end
+	for _, child in ipairs(kids) do
+		if child:IsShown() and not (child.IsForbidden and child:IsForbidden()) then
+			local side = left and child:GetLeft() or child:GetRight()
+			local s = child:GetEffectiveScale()
+			if side and s then
+				local d = left and (edge - side * s) or (side * s - edge)
+				if d > out then out = d end
+			end
+		end
+	end
+	return math.min(out / scale, GUTTER_MAX)
+end
+
 -- A line beside the holder: at its top edge, or under its bottom edge.
-local function PlaceLine(line, h, left, edge, y)
+local function PlaceLine(line, h, left, edge, y, gutter)
 	line:ClearAllPoints()
+	local x = 8 + (gutter or 0)
 	if left then
-		line:SetPoint("TOPRIGHT", h, edge .. "LEFT", -8, y)
+		line:SetPoint("TOPRIGHT", h, edge .. "LEFT", -x, y)
 	else
-		line:SetPoint("TOPLEFT", h, edge .. "RIGHT", 8, y)
+		line:SetPoint("TOPLEFT", h, edge .. "RIGHT", x, y)
 	end
 end
 
@@ -692,17 +785,25 @@ local function OnHeader(block)
 		-- Level with the quest's title.
 		local header = block.HeaderText
 		local ht, bt = header and header:GetTop(), block:GetTop()
+		local y = (ht and bt) and (ht - bt + 1) or 0
 		n = n + 1
 		local line = ZoneLine(h, n)
-		PlaceLine(line, h, left, "TOP", (ht and bt) and (ht - bt + 1) or 0)
+		PlaceLine(line, h, left, "TOP", y, Gutter(block, left))
 		ShowLine(line, entry.name, nil, justify)
+		-- The POI button is added after the header is set: look again once
+		-- the tracker has finished this block.
+		C_Timer.After(0, function()
+			if line:IsShown() and line.zone == entry.name then
+				pcall(function() PlaceLine(line, h, left, "TOP", y, Gutter(block, left)) end)
+			end
+		end)
 	end
 	if entry.below then
 		for i, row in ipairs(entry.below) do
 			n = n + 1
 			local line = ZoneLine(h, n)
 			PlaceLine(line, h, left, "BOTTOM", -2 - ROW * (i - 1))
-			ShowLine(line, row.name, row.count, justify)
+			ShowLine(line, row.name, row.count, justify, row.done)
 		end
 	end
 end
@@ -755,6 +856,16 @@ SlashCmdList.QUESTLOGSORT = function(msg)
 		end
 		return
 	end
+	if msg == "klara" or msg == "finished" then
+		QuestLogSortDB.autoFoldOff = AutoFoldOn() or nil
+		if AutoFoldOn() then
+			wipe(CharDB().keepOpen)
+			QueueAutoFold()
+		end
+		Say(AutoFoldOn() and "zoner där alla uppdrag är klara fälls ihop av sig själva (i zonläget)."
+			or "klara zoner fälls inte längre ihop av sig själva.")
+		return
+	end
 	if msg == "öppna" or msg == "oppna" or msg == "expand" then
 		UnfoldAll()
 		Say(InCombat() and "zonerna fälls ut när striden är över." or "alla zoner är utfällda.")
@@ -770,7 +881,8 @@ SlashCmdList.QUESTLOGSORT = function(msg)
 	else
 		Say("/qls av stänger av all sortering (questloggen och trackern), /qls på slår på den igen. "
 			.. "/qls zon sorterar trackern zon för zon (zonen du är i först; klicka på en zon för att fälla ihop den), "
-			.. "/qls nivå bara efter nivå, /qls öppna fäller ut alla zoner. "
+			.. "/qls nivå bara efter nivå, /qls öppna fäller ut alla zoner, "
+			.. "/qls klara slår av eller på att zoner där allt är klart fälls ihop av sig själva. "
 			.. "Nu: " .. (Enabled() and "på" or "av") .. ", trackern " .. (ByZone() and "zon för zon" or "efter nivå") .. ".")
 		return
 	end

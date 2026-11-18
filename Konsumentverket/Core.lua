@@ -309,6 +309,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		RedrawSoon()
 	elseif event == "TRADE_SKILL_SHOW" then
 		ReadSoon()
+		if ns.ShowProfessionButton then pcall(ns.ShowProfessionButton) end
 		if db.auto and ns.ShowBesideProfession then C_Timer.After(0.4, ns.ShowBesideProfession) end
 	elseif event == "TRADE_SKILL_CLOSE" then
 		if ns.ProfessionClosed then ns.ProfessionClosed() end
