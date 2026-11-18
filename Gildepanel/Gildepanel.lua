@@ -940,6 +940,7 @@ local WINDOWS = {
 	{ "SCB", "SCB", "SCB" },
 	{ "Konsumentverket", "Konsumentverket", "KONSUMENTVERKET" },
 	{ "Konsumentverket", "Sök utrustning", "KONSUMENTVERKET", "sök" },
+	{ "PTS", "Chattkanaler", "PTS" },
 }
 
 -- invert: the addon stores "quiet", the box shows the opposite.
@@ -1012,6 +1013,14 @@ local SETTINGS = {
 	} },
 	{ addon = "Konsumentverket", tab = "game", title = "Konsumentverket", db = "KonsumentverketDB", items = {
 		{ key = "auto", label = "Öppna bredvid yrkesfönstret", default = false },
+	} },
+	{ addon = "Riksantikvarieambetet", tab = "game", title = "Riksantikvarieämbetet", db = "RiksantikvarieambetetDB", items = {
+		{ key = "on", label = "Rapport när du lämnar en instans", default = true },
+		{ key = "party", label = "En rad i gruppchatten", under = "on" },
+	} },
+	-- Through the command: it changes the game's chat strings right away.
+	{ addon = "PTS", tab = "game", title = "PTS", db = "PTSDB", items = {
+		{ key = "short", label = "Korta kanalnamn: [G], [P], [2. T]", slash = { "PTS", "korta" } },
 	} },
 	{ addon = "FrokenUr", tab = "game", title = "Fröken Ur", db = "FrokenUrDB", items = {
 		{ key = "on", label = "Tid på nedkylningarna", default = true, slash = { "FROKENUR", "på", "av" } },

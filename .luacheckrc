@@ -19,7 +19,7 @@ globals = {
 	"SLASH_HANDLAGGAREN1", "SLASH_HANDLAGGAREN2", "SLASH_KOLAPP1",
 	"SLASH_POLISEN1", "SLASH_POLISEN2", "SLASH_POSTNORD1", "SLASH_QUESTLOGSORT1", "SLASH_QUESTLOGSORT2", "QuestLogSortDB", "QuestLogSortCharDB",
 	"SLASH_SCB1", "SLASH_SCB2", "SkolverketCharDB",
-	"SkolverketDB", "SlashCmdList",
+	"SkolverketDB", "SlashCmdList", "PTSDB", "SLASH_PTS1", "SLASH_PTS2", "RiksantikvarieambetetDB", "SLASH_RAA1", "SLASH_RAA2",
 	-- Opening the color picker sets its fields (Bolagsverket).
 	"ColorPickerFrame", "StaticPopupDialogs",
 }
@@ -27,6 +27,8 @@ globals = {
 -- Game API and UI globals the addons read. Some are only fallbacks for older
 -- clients (see "The Forever client" in README.md).
 read_globals = {
+	"GetChannelList", "EnumerateServerChannels", "LeaveChannelByName", "JoinChannelByName", "ChatFrame_AddChannel", "ChatFrameUtil",
+	"LOOT_ITEM_SELF", "LOOT_ITEM_SELF_MULTIPLE", "UnitXP", "UnitXPMax", "UnitIsFeignDeath", "GetInstanceInfo",
 	"UnitQuestTrivialLevelRange", "GetQuestGreenRange", "QuestDifficultyColors", "GetServerTime", "GossipFrame", "InCombatLockdown", "QuestFrame",
 	"AcceptQuest", "Ambiguate", "BackdropTemplateMixin", "BokforingFrame", "BokforingDB", "Auctionator", "C_AuctionHouse", "AuctionHouseFrame", "ChatEdit_InsertLink", "GetItemStats", "GetItemInfoInstant", "ITEM_QUALITY_COLORS", "StaticPopup_Show", "OKAY", "CANCEL", "MenuUtil", "ReloadUI",
 	"GetMerchantNumItems", "GetMerchantItemID", "GetMerchantItemInfo", "C_MerchantFrame", "GetItemCount", "ProfessionsFrame", "TradeSkillFrame",
