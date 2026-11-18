@@ -1018,9 +1018,9 @@ local SETTINGS = {
 		{ key = "on", label = "Rapport när du lämnar en instans", default = true },
 		{ key = "party", label = "En rad i gruppchatten", under = "on" },
 	} },
-	-- Through the command: it changes the game's chat strings right away.
+	-- Through the command: it adds the chat filter right away.
 	{ addon = "PTS", tab = "game", title = "PTS", db = "PTSDB", items = {
-		{ key = "short", label = "Korta kanalnamn: [G], [P], [2. T]", slash = { "PTS", "korta" } },
+		{ key = "short", label = "Korta kanalnamn: [2. T]", slash = { "PTS", "korta" } },
 	} },
 	{ addon = "FrokenUr", tab = "game", title = "Fröken Ur", db = "FrokenUrDB", items = {
 		{ key = "on", label = "Tid på nedkylningarna", default = true, slash = { "FROKENUR", "på", "av" } },

@@ -7,11 +7,12 @@
 -- for "Trade - City"), and whenever the game joins you to a blocked channel
 -- PTS leaves it again. Ticking it joins it again and takes it off the list.
 --
--- /pts korta (off by default) shortens the channel names in chat: [Guild]
--- to [G], [Party] to [P], [2. Trade - City] to [2. T]. The group channels
--- use the game's CHAT_*_GET strings (put back when turned off); numbered
--- channels go through a chat event filter that only changes the channel's
--- name, never the message.
+-- /pts korta (off by default) shortens the numbered channels' names in
+-- chat: [2. Trade - City] to [2. T], through a chat event filter that only
+-- changes the channel's name, never the message. Guild and party stay as
+-- they are: their [Guild] and [Party] come from the game's CHAT_*_GET
+-- strings, and an addon writing those taints the chat code, which then
+-- can't read the hidden (secret) sender names in instances (0.1 did that).
 
 local ADDON = ...
 local db
@@ -120,16 +121,10 @@ end
 ---------------------------------------------------------------------------
 -- Short names.
 
-local SHORT_GROUP = {
-	GUILD = "G", OFFICER = "O", PARTY = "P", PARTY_LEADER = "PL", PARTY_GUIDE = "PG",
-	RAID = "R", RAID_LEADER = "RL", RAID_WARNING = "RW",
-	INSTANCE_CHAT = "I", INSTANCE_CHAT_LEADER = "IL",
-}
 local SHORT_CHANNEL = {
 	General = "Gen", Trade = "T", LocalDefense = "LD", WorldDefense = "WD",
 	LookingForGroup = "LFG", GuildRecruitment = "GR", Services = "S", NewcomerChat = "N",
 }
-local saved = {}  -- CHAT_*_GET -> the game's own text, while shortened
 
 local function ShortChannel(base)
 	if SHORT_CHANNEL[base] then return SHORT_CHANNEL[base] end
@@ -152,26 +147,13 @@ end
 
 local filterAdded = false
 local function ApplyShort()
-	if db.short then
-		for key, short in pairs(SHORT_GROUP) do
-			local name = "CHAT_" .. key .. "_GET"
-			local text = _G[name]
-			if type(text) == "string" and saved[name] == nil then
-				saved[name] = text
-				_G[name] = (text:gsub("%[.-%]", "[" .. short .. "]", 1))
-			end
+	-- The filter stays and does nothing while off.
+	if db.short and not filterAdded then
+		local add = ChatFrame_AddMessageEventFilter or (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter)
+		if add then
+			add("CHAT_MSG_CHANNEL", ChannelFilter)
+			filterAdded = true
 		end
-		if not filterAdded then
-			local add = ChatFrame_AddMessageEventFilter or (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter)
-			if add then
-				add("CHAT_MSG_CHANNEL", ChannelFilter)
-				filterAdded = true
-			end
-		end
-	else
-		for name, text in pairs(saved) do _G[name] = text end
-		wipe(saved)
-		-- The filter stays and does nothing while off.
 	end
 end
 
@@ -218,7 +200,7 @@ local function Build()
 	short:SetPoint("TOPLEFT", 24, -114 + dy - ROWS * ROW_H)
 	local shortText = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	shortText:SetPoint("LEFT", short, "RIGHT", 4, 0)
-	shortText:SetText("Korta kanalnamn: [G], [P], [2. T]")
+	shortText:SetText("Korta kanalnamn: [2. T]")
 	short:SetScript("OnClick", function(self)
 		db.short = self:GetChecked() and true or false
 		ApplyShort()
@@ -302,7 +284,7 @@ SlashCmdList.PTS = function(msg)
 		db.short = not db.short
 		ApplyShort()
 		if window and window:IsShown() then window.Refresh() end
-		Print(db.short and "korta kanalnamn i chatten: [G], [P], [2. T]." or "kanalnamnen är som spelets igen.")
+		Print(db.short and "korta kanalnamn i chatten: [2. T]." or "kanalnamnen är som spelets igen.")
 	elseif msg == "" then
 		Toggle()
 	else
