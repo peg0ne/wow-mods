@@ -3,7 +3,7 @@
 ## Category: THÖNDERSTÖRM
 ## IconTexture: Interface\Icons\INV_Letter_15
 ## Notes: Post- och telestyrelsen, for your chat channels: /pts lists every channel with a box to leave it, and a channel you leave stays left even when the game puts you back in it (General, Trade and the rest on every zone change). Optionally shorter channel names in chat: [2. T].
-## Version: 0.1.1
+## Version: 0.1.2
 ## Dependencies: Statskontoret
 ## SavedVariables: PTSDB
 Core.lua

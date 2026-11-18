@@ -93,8 +93,22 @@ local function SweepSoon()
 	end)
 end
 
+-- Leaving a channel keeps it in the chat window's settings, so a channel
+-- PTS left shows again by itself. Only one that isn't there is added: the
+-- game's ChatFrame_AddChannel writes the frame's channelList from addon
+-- code, which taints the chat code that reads it later.
+local function InChat(frame, name)
+	local lower = name:lower()
+	for _, v in pairs(frame.channelList or {}) do
+		v = Plain(v)
+		if type(v) == "string" and (v:lower() == lower or (Base(v) or ""):lower() == lower) then return true end
+	end
+	return false
+end
+
 local function AddToChat(name)
 	local frame = DEFAULT_CHAT_FRAME
+	if InChat(frame, name) then return end
 	if ChatFrame_AddChannel then
 		pcall(ChatFrame_AddChannel, frame, name)
 	elseif ChatFrameUtil and ChatFrameUtil.AddChannel then
@@ -137,6 +151,14 @@ local function ChannelFilter(_, _, ...)
 	if not (db and db.short) then return false end
 	local n = select("#", ...)
 	local args = { ... }
+	-- A hidden (secret) sender or message: hand nothing back. Values passed
+	-- back through an addon's filter come back tainted, which breaks the
+	-- chat code the same way 0.1's [P] did.
+	if issecretvalue then
+		for i = 1, n do
+			if issecretvalue(args[i]) then return false end
+		end
+	end
 	local shown, number, name = Plain(args[4]), Plain(args[8]), Plain(args[9])
 	if type(shown) ~= "string" or shown == "" then return false end
 	local base = Base(type(name) == "string" and name ~= "" and name or shown:gsub("^%d+%.%s*", ""))

@@ -3,7 +3,7 @@
 ## Category: THÖNDERSTÖRM
 ## IconTexture: Interface\Icons\INV_Misc_Shovel_01
 ## Notes: A report of every dungeon and raid run when you leave it: time, enemies killed, bosses, experience, gold, what the loot is worth at a vendor, the best find, and who died (and to what). Dying and running back in keeps the same run. Optionally a one-line summary in party chat. /raa shows the last report, /raa lista the latest runs.
-## Version: 0.1
+## Version: 0.1.1
 ## OptionalDeps: Rattsmedicinalverket
 ## SavedVariables: RiksantikvarieambetetDB
 Core.lua

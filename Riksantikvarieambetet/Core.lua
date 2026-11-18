@@ -106,7 +106,14 @@ local function Lines(run)
 	table.insert(lines, string.format("utgrävningen av |cffffd100%s|r%s är %s.", run.name or "?",
 		run.diff and (" (" .. run.diff .. ")") or "", run.resumed and "klar (med uppehåll)" or "klar"))
 	local bosses = #run.bosses > 0 and string.format("%d (%s)", #run.bosses, table.concat(run.bosses, ", ")) or "inga"
-	table.insert(lines, string.format("Tid: %s · fiender: %d · bossar: %s", Minutes(duration), run.kills, bosses))
+	-- Kills are counted from experience, so with none (max level) there is
+	-- no count to give.
+	local counted = run.kills > 0 or run.xp > 0
+	if counted then
+		table.insert(lines, string.format("Tid: %s · fiender: %d · bossar: %s", Minutes(duration), run.kills, bosses))
+	else
+		table.insert(lines, string.format("Tid: %s · bossar: %s", Minutes(duration), bosses))
+	end
 	local parts = {}
 	if run.xp > 0 then
 		table.insert(parts, "erfarenhet: +" .. Num(run.xp) .. (run.levels > 0 and string.format(" (+%d %s)", run.levels, run.levels == 1 and "nivå" or "nivåer") or ""))
@@ -141,10 +148,11 @@ local function Lines(run)
 	local remark = Remark(run, duration, deaths)
 	if remark then table.insert(lines, "|cffa0a0a0" .. remark .. "|r") end
 
-	local short = string.format("{rt3} Riksantikvarieämbetet: %s på %s, %d fiender, %d %s, %d dödsfall.",
-		run.name or "?", Minutes(duration), run.kills, #run.bosses, #run.bosses == 1 and "boss" or "bossar", deaths)
+	local enemies = counted and string.format(", %d fiender", run.kills) or ""
+	local short = string.format("{rt3} Riksantikvarieämbetet: %s på %s%s, %d %s, %d dödsfall.",
+		run.name or "?", Minutes(duration), enemies, #run.bosses, #run.bosses == 1 and "boss" or "bossar", deaths)
 	if run.best then short = short .. " Bästa fyndet: " .. run.best.link end
-	local list = string.format("%s: %s, %d fiender, %d bossar, %d dödsfall", run.name or "?", Minutes(duration), run.kills, #run.bosses, deaths)
+	local list = string.format("%s: %s%s, %d bossar, %d dödsfall", run.name or "?", Minutes(duration), enemies, #run.bosses, deaths)
 	return lines, short, list
 end
 
@@ -182,7 +190,7 @@ local function Check()
 	local run = db.run
 	if name then
 		local _, _, diffName = InDungeon()
-		if run and run.mapID == mapID and (not run.left or time() - run.left < RESUME) then
+		if run and mapID and run.mapID == mapID and (not run.left or time() - run.left < RESUME) then
 			if run.left then
 				run.left = nil
 				if run.reported then run.reported, run.resumed = false, true end
