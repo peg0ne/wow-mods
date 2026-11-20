@@ -75,12 +75,17 @@ local function ReadTexts()
 	texts = {}
 	if not (GetQuestLogQuestText and C_QuestLog.SetSelectedQuest and C_QuestLog.GetSelectedQuest) then return end
 	local selected = C_QuestLog.GetSelectedQuest()
-	for id in pairs(inLog) do
-		C_QuestLog.SetSelectedQuest(id)
-		local description, objectives = GetQuestLogQuestText()
-		local text = (description or "") .. "\n" .. (objectives or "")
-		if not (issecretvalue and issecretvalue(text)) then texts[id] = text:lower() end
-	end
+	-- 0.4.1: an error part way (a secret text) used to skip putting the
+	-- quest log's selection back.
+	pcall(function()
+		for id in pairs(inLog) do
+			C_QuestLog.SetSelectedQuest(id)
+			local description, objectives = GetQuestLogQuestText()
+			if not (issecretvalue and (issecretvalue(description) or issecretvalue(objectives))) then
+				texts[id] = ((description or "") .. "\n" .. (objectives or "")):lower()
+			end
+		end
+	end)
 	if selected then C_QuestLog.SetSelectedQuest(selected) end
 end
 

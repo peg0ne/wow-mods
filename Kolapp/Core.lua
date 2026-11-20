@@ -177,6 +177,10 @@ end
 -- A block is only labelled when its title contains the quest's title, so
 -- blocks for achievements or other things with the same ID are left alone.
 
+-- 0.4.1: the whole hook runs in pcall. These hooks run inside the tracker's
+-- own update, so an error in ShowLabel (it wasn't protected) would stop
+-- that update halfway and could leave the tracker stale until a reload.
+
 local hookedTables = {}
 
 local function TrackerLabel(block, text)
@@ -189,7 +193,14 @@ local function TrackerLabel(block, text)
 	if label and not text:find(label, 1, true) then return label end
 end
 
-local function ShowLabel(block, text, label)
+local ShowLabel
+
+local function OnHeader(block, text)
+	local label = TrackerLabel(block, text)
+	if label then ShowLabel(block, text, label) end
+end
+
+ShowLabel = function(block, text, label)
 	local header = block.HeaderText
 	if not header or not header.SetText then return end
 	local lines = header.GetNumLines and header:GetNumLines()
@@ -206,16 +217,10 @@ local function HookTracker()
 		if type(value) == "table" and not hookedTables[value] and type(name) == "string" then
 			if name:find("BlockMixin") and type(rawget(value, "SetHeader")) == "function" then
 				hookedTables[value] = true
-				hooksecurefunc(value, "SetHeader", function(block, text)
-					local ok, label = pcall(TrackerLabel, block, text)
-					if ok and label then ShowLabel(block, text, label) end
-				end)
+				hooksecurefunc(value, "SetHeader", function(block, text) pcall(OnHeader, block, text) end)
 			elseif name:find("TRACKER_MODULE") and type(rawget(value, "SetBlockHeader")) == "function" then
 				hookedTables[value] = true
-				hooksecurefunc(value, "SetBlockHeader", function(_, block, text)
-					local ok, label = pcall(TrackerLabel, block, text)
-					if ok and label then ShowLabel(block, text, label) end
-				end)
+				hooksecurefunc(value, "SetBlockHeader", function(_, block, text) pcall(OnHeader, block, text) end)
 			end
 		end
 	end
