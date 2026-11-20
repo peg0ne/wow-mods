@@ -426,19 +426,30 @@ end
 
 local busy = false -- folding or unfolding: our own watch changes
 local QueuePanel -- shows folded zones while the tracker has no quests (below)
+local RefreshLines -- redraws the zone lines beside the tracker (below)
+
+-- Runs our own watch changes with busy set. 1.9.1: busy is always cleared
+-- again, even after an error; left set, folding stopped until a reload.
+local function Busy(fn, ...)
+	busy = true
+	local ok, err = pcall(fn, ...)
+	busy = false
+	Report(ok, err)
+end
+
 local function Fold(zone, auto)
 	local c = CharDB()
 	local zones, names = ZoneOrder()
-	busy = true
 	c.collapsed[zone] = auto and "auto" or true
 	c.keepOpen[zone] = nil
-	for _, id in ipairs(WatchedQuests()) do
-		if names[zones[id]] == zone then
-			c.hidden[id] = zone
-			Watch.RemoveQuestWatch(id)
+	Busy(function()
+		for _, id in ipairs(WatchedQuests()) do
+			if names[zones[id]] == zone then
+				c.hidden[id] = zone
+				Watch.RemoveQuestWatch(id)
+			end
 		end
-	end
-	busy = false
+	end)
 	QueuePanel()
 end
 
@@ -446,16 +457,16 @@ end
 -- folded straight back.
 local function Unfold(zone, byHand)
 	local c = CharDB()
-	busy = true
 	c.collapsed[zone] = nil
 	if byHand then c.keepOpen[zone] = true end
-	for id, z in pairs(c.hidden) do
-		if z == zone then
-			c.hidden[id] = nil
-			if not Watch.GetLogIndexForQuestID or Watch.GetLogIndexForQuestID(id) then Watch.AddQuestWatch(id) end
+	Busy(function()
+		for id, z in pairs(c.hidden) do
+			if z == zone then
+				c.hidden[id] = nil
+				if not Watch.GetLogIndexForQuestID or Watch.GetLogIndexForQuestID(id) then Watch.AddQuestWatch(id) end
+			end
 		end
-	end
-	busy = false
+	end)
 	QueuePanel()
 end
 
@@ -489,17 +500,17 @@ local function Refold()
 	if not next(c.collapsed) then return end
 	local zones, names = ZoneOrder()
 	local reopen = {}
-	busy = true
-	for _, id in ipairs(WatchedQuests()) do
-		local zone = names[zones[id]]
-		if zone and c.collapsed[zone] == "auto" and not Watch.IsComplete(id) then
-			reopen[zone] = true
-		elseif zone and c.collapsed[zone] and not reopen[zone] then
-			c.hidden[id] = zone
-			Watch.RemoveQuestWatch(id)
+	Busy(function()
+		for _, id in ipairs(WatchedQuests()) do
+			local zone = names[zones[id]]
+			if zone and c.collapsed[zone] == "auto" and not Watch.IsComplete(id) then
+				reopen[zone] = true
+			elseif zone and c.collapsed[zone] and not reopen[zone] then
+				c.hidden[id] = zone
+				Watch.RemoveQuestWatch(id)
+			end
 		end
-	end
-	busy = false
+	end)
 	for zone in pairs(reopen) do Unfold(zone) end
 end
 
@@ -547,9 +558,9 @@ foldEvents:RegisterEvent("QUEST_LOG_UPDATE")
 foldEvents:SetScript("OnEvent", function(_, event, id)
 	if not ready then return end
 	QueueAutoFold()
-	-- Progress on a quest: only the auto fold cares.
-	if event == "QUEST_LOG_UPDATE" then return end
+	-- Progress on a quest can change the zone lines' counts too.
 	QueuePanel()
+	if event == "QUEST_LOG_UPDATE" then return end
 	if event == "QUEST_REMOVED" then
 		if id then CharDB().hidden[id] = nil end
 	elseif event == "PLAYER_REGEN_ENABLED" then
@@ -703,6 +714,7 @@ QueuePanel = function()
 	C_Timer.After(0.1, function()
 		panelPending = false
 		Report(pcall(UpdatePanel))
+		Report(pcall(RefreshLines))
 	end)
 end
 
@@ -768,8 +780,11 @@ local function PlaceLine(line, h, left, edge, y, gutter)
 	end
 end
 
+local blocks = setmetatable({}, { __mode = "k" }) -- every tracker block seen
+
 local function OnHeader(block)
 	if not block or (block.IsForbidden and block:IsForbidden()) then return end
+	blocks[block] = true
 	-- Each update starts from nothing shown.
 	HideLines(holders[block])
 	if not (Enabled() and ByZone()) then return end
@@ -805,6 +820,20 @@ local function OnHeader(block)
 			PlaceLine(line, h, left, "BOTTOM", -2 - ROW * (i - 1))
 			ShowLine(line, row.name, row.count, justify, row.done)
 		end
+	end
+end
+
+-- 1.9.1: the zone lines were only redrawn when the tracker set a block's
+-- title. A quest that finishes, or is handed in from a folded zone, changes
+-- the lines while the tracker redraws nothing (a folded quest isn't
+-- watched), so "+ Zone (3 klara)" kept its old count, or stayed after the
+-- zone was empty, and a zone's name could stay on a quest that was no
+-- longer its first, until a reload. Now every shown block is also redrawn
+-- with QueuePanel, after quest and watch changes. Only our own frames move.
+RefreshLines = function()
+	plan = nil
+	for block in pairs(blocks) do
+		if block:IsVisible() then pcall(OnHeader, block) end
 	end
 end
 
