@@ -1,0 +1,13 @@
+## Interface: 16001
+## Title: Lantmäteriet
+## Category: THÖNDERSTÖRM
+## IconTexture: Interface\Icons\INV_Misc_Flower_02
+## Notes: Herbs and ore for gatherers: the node the Interact key would use lights up, in its color when your skill is high enough and red when it isn't (nearby only, up to the game's soft-target range). Every node the guild gathers is saved and shared, and shown on the world map and minimap at any distance. /lm for the commands.
+## Version: 0.1
+## Dependencies: Statskontoret
+## OptionalDeps: OpenMap
+## SavedVariables: LantmaterietDB
+Data.lua
+Core.lua
+Glow.lua
+Map.lua

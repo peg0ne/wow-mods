@@ -20,6 +20,7 @@ globals = {
 	"SLASH_POLISEN1", "SLASH_POLISEN2", "SLASH_POSTNORD1", "SLASH_QUESTLOGSORT1", "SLASH_QUESTLOGSORT2", "QuestLogSortDB", "QuestLogSortCharDB",
 	"SLASH_SCB1", "SLASH_SCB2", "SkolverketCharDB",
 	"SkolverketDB", "SlashCmdList", "PTSDB", "SLASH_PTS1", "SLASH_PTS2", "RiksantikvarieambetetDB", "SLASH_RAA1", "SLASH_RAA2",
+	"LantmaterietDB", "SLASH_LANTMATERIET1", "SLASH_LANTMATERIET2",
 	-- Opening the color picker sets its fields (Bolagsverket).
 	"ColorPickerFrame", "StaticPopupDialogs",
 }
@@ -65,6 +66,6 @@ read_globals = {
 	"UnitClass", "UnitCreatureFamily", "UnitPlayerControlled", "C_TooltipInfo", "IsInRaid", "UnitExists", "UnitFactionGroup", "UnitGUID",
 	"UnitIsDeadOrGhost", "UnitIsFriend", "UnitIsPlayer", "UnitLevel", "UnitName", "UnitRace",
 	"UseContainerItem", "WorldMapFrame", "bit", "date", "format", "geterrorhandler", "hooksecurefunc",
-	"EnumerateFrames", "issecretvalue", "strsplit", "strtrim", "time", "tinsert", "wipe",
+	"EnumerateFrames", "issecretvalue", "GetPlayerFacing", "IsIndoors", "strsplit", "strtrim", "time", "tinsert", "wipe",
 }
 

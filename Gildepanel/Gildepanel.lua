@@ -1022,6 +1022,15 @@ local SETTINGS = {
 	{ addon = "PTS", tab = "game", title = "PTS", db = "PTSDB", items = {
 		{ key = "short", label = "Korta kanalnamn: [2. T]", slash = { "PTS", "korta" } },
 	} },
+	-- The glow through the command: it changes the game's soft-target settings.
+	{ addon = "Lantmateriet", tab = "game", title = "Lantmäteriet", db = "LantmaterietDB", items = {
+		{ key = "glow", label = "Lys upp noden framför dig", default = true, slash = { "LANTMATERIET", "glöd" },
+			tip = "Örter och malm inom några meter, i rött om din färdighet är för låg." },
+		{ key = "minimap", label = "Fyndplatser på minikartan", default = true },
+		{ key = "map", label = "Fyndplatser på världskartan", default = true },
+		{ key = "all", label = "Även andra yrkens noder" },
+		{ key = "share", label = "Dela mina fynd med gillet", default = true },
+	} },
 	{ addon = "FrokenUr", tab = "game", title = "Fröken Ur", db = "FrokenUrDB", items = {
 		{ key = "on", label = "Tid på nedkylningarna", default = true, slash = { "FROKENUR", "på", "av" } },
 	} },
@@ -1693,8 +1702,14 @@ end
 -- seconds after login, and once more later in case the game or another
 -- addon changed it in between. Changes are not saved until the restore has
 -- run, so the reset state at login doesn't overwrite your choice.
+-- 2.21.2: dying drops the tracking spells too. Before, that dropped state was
+-- saved over your choice (so nothing came back at the next login, and
+-- the setting looked like it did nothing). Now nothing is saved while you
+-- are dead or just after, and the tracking is turned on again when you
+-- are alive. /gpanel spårning status lists what the game reports.
 
 local trackingReady = false
+local trackingHoldUntil = 0
 
 local function CharKey()
 	return (UnitName("player") or "?") .. "-" .. (GetRealmName() or "?")
@@ -1728,6 +1743,7 @@ end
 
 local function SaveTracking()
 	if not trackingReady or db.keepTracking == false then return end
+	if UnitIsDeadOrGhost("player") or GetTime() < trackingHoldUntil then return end
 	local on = {}
 	for i = 1, NumTracking() do
 		local name, active, isSpell = TrackingInfo(i)
@@ -1967,7 +1983,7 @@ end
 local events = CreateFrame("Frame")
 for _, event in ipairs({
 	"ADDON_LOADED", "PLAYER_LOGIN", "GUILD_ROSTER_UPDATE", "PLAYER_MONEY", "PLAYER_GUILD_UPDATE",
-	"MINIMAP_UPDATE_TRACKING",
+	"MINIMAP_UPDATE_TRACKING", "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST",
 	"GUILDBANKFRAME_OPENED", "GUILDBANKFRAME_CLOSED",
 	"PLAYER_INTERACTION_MANAGER_FRAME_SHOW", "PLAYER_INTERACTION_MANAGER_FRAME_HIDE",
 }) do
@@ -2003,6 +2019,16 @@ events:SetScript("OnEvent", function(_, event, arg)
 		return
 	elseif event == "MINIMAP_UPDATE_TRACKING" then
 		SaveTracking()
+		return
+	elseif event == "PLAYER_DEAD" then
+		trackingHoldUntil = math.huge
+		return
+	elseif event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST" then
+		-- Alive again (PLAYER_ALIVE also comes on release, as a ghost).
+		if UnitIsDeadOrGhost("player") then return end
+		trackingHoldUntil = GetTime() + 8
+		C_Timer.After(2, RestoreTracking)
+		C_Timer.After(6, RestoreTracking)
 		return
 	elseif event == "GUILD_ROSTER_UPDATE" or event == "PLAYER_GUILD_UPDATE" then
 		guildDirty = true
@@ -2100,6 +2126,16 @@ SlashCmdList.GILDEPANEL = function(msg)
 			db.celebrate = db.celebrate == false
 			Print(db.celebrate and "firar när du betalar skatt. Prova med /gpanel firande test." or "inget firande när du betalar skatt.")
 		end
+	elseif (cmd == "spårning" or cmd == "tracking") and rest == "status" then
+		local want = db.tracking and db.tracking[CharKey()] or {}
+		Print("sparat: " .. (#want > 0 and table.concat(want, ", ") or "inget") .. (db.keepTracking == false and " (avstängt)" or ""))
+		for i = 1, NumTracking() do
+			local name, active, isSpell = TrackingInfo(i)
+			if isSpell or active then
+				Print(format("%d. %s: %s%s", i, tostring(name), active and "på" or "av", isSpell and "" or " (ingen besvärjelse)"))
+			end
+		end
+		return
 	elseif cmd == "spårning" or cmd == "tracking" then
 		db.keepTracking = db.keepTracking == false
 		if db.keepTracking then SaveTracking() end
