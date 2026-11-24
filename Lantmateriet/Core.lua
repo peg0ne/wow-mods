@@ -271,7 +271,10 @@ local function Answer(sender, since)
 	for i = 1, math.min(#found, MAX_ANSWER) do
 		entries[i] = Entry(found[i].map, found[i].n)
 	end
-	SendEntries(entries, "WHISPER", sender)
+	-- To the guild, not a whisper: on Forever the sender is a two-word name
+	-- ("First Last") that whispers can't reach. Members who already have
+	-- these finds just skip them.
+	SendEntries(entries, "GUILD")
 end
 
 local function OnAddonMessage(prefix, msg, channel, sender)
@@ -279,7 +282,10 @@ local function OnAddonMessage(prefix, msg, channel, sender)
 	msg, sender = Plain(msg), Plain(sender)
 	if not msg or not sender then return end
 	local who = Short(sender)
-	if who == UnitName("player") or who == Short(UnitName("player")) then return end
+	-- Our own guild messages come back to us. UnitName gives only our first
+	-- name; the sender is our full "First Last".
+	local me = UnitName("player")
+	if who == me or who:match("^(%S+)") == me then return end
 	if channel ~= "GUILD" and channel ~= "WHISPER" then return end
 	local kind = msg:sub(1, 1)
 	if kind == "N" then
