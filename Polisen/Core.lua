@@ -14,6 +14,12 @@
 --   E;asker;more;last               end of an answer (0.4); more = 1 when
 --                                   there are more after last: ask again
 --   S;guid;name;zone;level          I just saw this reported player
+--   K;id;victim;guid;level;class;race;zone;stamp;hk   I (0.5) killed a hostile
+--                                   player; hk = 1 when the game gave an
+--                                   honorable kill for it
+--
+-- Victories (0.5): a hostile player we fought dies, see "Victories" below.
+-- Killing someone in the registry is celebrated by the whole guild.
 --
 -- Catching up: db.synced is the (server) time up to which this client has
 -- every incident. At login it asks for everything after it, oldest first,
@@ -150,6 +156,15 @@ local function Rebuild()
 		byName[s.name] = s
 	end
 	ns.suspects = suspects
+	-- How often the guild has killed each reported player.
+	for id, k in pairs(db.kills) do
+		if k.time < cutoff then
+			db.kills[id] = nil
+		else
+			local s = (k.guid and byGUID[k.guid]) or byName[k.victim]
+			if s then s.kills = (s.kills or 0) + 1 end
+		end
+	end
 end
 
 local function Changed()
@@ -379,6 +394,311 @@ local function OnSeen(sender, f)
 end
 
 ---------------------------------------------------------------------------
+-- Victories (0.5). Without the combat log nobody can see who landed the
+-- killing blow, so a kill is: a hostile player of the other faction who
+-- was seen alive and then dead, and whom I fought in the last
+-- FIGHT_WINDOW seconds (my target while I was in combat, or they had me
+-- or someone in my group targeted). Everyone in the group who fought them
+-- counts it; the guild merges the reports into one victory. If the client
+-- sends honorable kill messages (CHAT_MSG_COMBAT_HONOR_GAIN), one of those
+-- counts too and marks the kill as honorable. Never in battlegrounds or
+-- arenas. Kills are not caught up after login: they are a celebration,
+-- not a record.
+
+local FIGHT_WINDOW = 20
+local KILL_SAME = 60      -- the same victim again within this is the same kill
+local foes = {}           -- key -> { name, guid, level, class, race, alive, fought }
+local recentKill = {}     -- victim name -> GetTime() of their kill
+
+local NORMAL = {
+	"{who} fällde {victim} i {zone}!",
+	"{who} skickade {victim} till andeläkaren i {zone}!",
+	"{victim} fick se sig besegrad av {by} i {zone}.",
+	"{who} gav {victim} en lektion i {zone}.",
+}
+
+local WANTED = {
+	"Efterlyst gripen! {who} fällde {victim} i {zone}. {victim} hade {count}. Hämnd för {victims}!",
+	"Rättvisa skipad! {victim}, efterlyst för {count}, föll för {by} i {zone}. Hämnd för {victims}!",
+}
+
+local function Fill(text, vars)
+	return (text:gsub("{(%a+)}", function(key) return vars[key] or "?" end))
+end
+
+-- The same kill gets the same wording on every computer.
+local function Pick(list, id)
+	local n = 0
+	for i = 1, #id do n = (n * 31 + id:byte(i)) % 2147483647 end
+	return list[n % #list + 1]
+end
+
+-- 1:a, 2:a, 3:e ... 21:a, but 11:e and 12:e.
+local function Ordinal(n)
+	local last, lastTwo = n % 10, n % 100
+	if (last == 1 or last == 2) and lastTwo ~= 11 and lastTwo ~= 12 then return n .. ":a" end
+	return n .. ":e"
+end
+
+local function Join(names)
+	if #names <= 1 then return names[1] or "" end
+	return table.concat(names, ", ", 1, #names - 1) .. " och " .. names[#names]
+end
+
+local function Fanfare()
+	if PlaySound and SOUNDKIT then pcall(PlaySound, SOUNDKIT.LEVELUPSOUND or 888) end
+end
+
+local function AddKill(k)
+	if db.kills[k.id] or k.time < time() - KEEP_DAYS * 86400 then return false end
+	db.kills[k.id] = k
+	return true
+end
+
+-- My victories in the last 30 days.
+local function MyKills()
+	local n = 0
+	for _, k in pairs(db.kills) do
+		if ns.IsMe(k.killer) then n = n + 1 end
+	end
+	return n
+end
+
+-- The kill as text. forGuild: third person and no colors, for guild chat.
+local function KillText(k, s, mine, forGuild)
+	local you = mine and not forGuild
+	local vars = {
+		who = you and "Du" or k.killer, by = you and "dig" or k.killer,
+		victim = forGuild and k.victim or ns.ClassText(k.class, k.victim), zone = k.zone ~= "" and k.zone or "okänd plats",
+	}
+	if not s then return Fill(Pick(NORMAL, k.id), vars) end
+	vars.count = string.format("%d anmälning%s", s.count, s.count == 1 and "" or "ar")
+	local victims = {}
+	for name in pairs(s.victims) do table.insert(victims, (not forGuild and ns.IsMe(name)) and "dig" or name) end
+	table.sort(victims)
+	vars.victims = Join(victims)
+	return Fill(Pick(WANTED, k.id), vars)
+end
+
+-- Guild chat, for members without the addon and the Discord bridge.
+-- Only the killer posts, 2 s after the K message so that members with the
+-- addon know to hide the line (they have their own). Ordinary kills at most
+-- once per GUILD_EVERY seconds; a wanted one always.
+local GUILD_EVERY = 30
+local lastGuildPost = -999
+local ownCopy = {}        -- guild chat lines we already show ourselves
+local heardKill = {}      -- sender -> GetTime() of their last K
+
+local function GuildLine(text)
+	local line = "Polisen: " .. text
+	if #line > 255 then line = Cut(line, 252) .. "..." end
+	return line
+end
+
+local function PostToGuild(k, s)
+	if not db.guildChat or not IsInGuild() then return end
+	if not s and GetTime() - lastGuildPost < GUILD_EVERY then return end
+	lastGuildPost = GetTime()
+	local line = GuildLine(KillText(k, s, true, true))
+	ownCopy[line] = true
+	C_Timer.After(2, function()
+		local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
+		if send then send(line, "GUILD") end
+	end)
+end
+
+local function Celebrate(k, mine)
+	local s = ns.Suspect(k.guid, k.victim)
+	k.wanted = s and true or nil
+	Changed()
+	local text = KillText(k, s, mine, false)
+	if mine then
+		text = text .. string.format(" Din %s seger de senaste 30 dagarna.", Ordinal(MyKills()))
+		PostToGuild(k, s)
+	end
+	Print(text)
+	-- Your own kill is celebrated on your screen; a wanted one on everybody's.
+	if (mine or s) and not db.noCheer then
+		if RaidNotice_AddMessage and RaidWarningFrame then
+			local banner = s and ("Efterlyst gripen: " .. k.victim .. "!") or ("Seger! " .. k.victim .. " är fälld.")
+			RaidNotice_AddMessage(RaidWarningFrame, "Polisen: " .. banner, { r = 0.3, g = 1, b = 0.3 })
+		end
+		Fanfare()
+	end
+end
+
+local function Kill(foe, hk)
+	if not ns.InOurGuild() or Statskontoret.InPvPInstance() then return end
+	local last = recentKill[foe.name]
+	if last and GetTime() - last < KILL_SAME then
+		-- Already counted: by me (an honorable kill message only confirms
+		-- it), or by someone in my group, and then I helped.
+		for _, k in pairs(db.kills) do
+			if k.victim == foe.name and math.abs(Now() - k.time) < KILL_SAME then
+				if ns.IsMe(k.killer) then
+					if hk then k.hk = true end
+				else
+					k.helpers = k.helpers or {}
+					local me = ns.Me() or UnitName("player")
+					if not tContains(k.helpers, me) then
+						table.insert(k.helpers, me)
+						Changed()
+						-- Others merge it into the same victory.
+						Send(string.format("K;%s;%s;;;;;%s;%d;%s", Clean(me .. ":" .. Now()), Clean(foe.name),
+							Clean(k.zone), Now(), hk and "1" or "0"))
+					end
+				end
+			end
+		end
+		return
+	end
+	recentKill[foe.name] = GetTime()
+	local me = ns.Me() or UnitName("player")
+	local zone = GetRealZoneText and GetRealZoneText() or GetZoneText()
+	local k = {
+		id = me .. ":" .. Now(), killer = me, victim = foe.name, guid = foe.guid, level = foe.level,
+		class = foe.class, race = foe.race, zone = zone or "", time = Now(), hk = hk or nil,
+	}
+	if not AddKill(k) then return end
+	Celebrate(k, true)
+	Send(string.format("K;%s;%s;%s;%s;%s;%s;%s;%d;%s", Clean(k.id), Clean(k.victim), k.guid or "", k.level or "",
+		k.class or "", Clean(k.race), Clean(k.zone), k.time, hk and "1" or "0"))
+end
+
+local function OnKill(sender, f)
+	heardKill[sender] = GetTime()
+	local stamp = tonumber(f[9])
+	if not f[2] or not f[3] or f[3] == "" or not stamp then return end
+	local victim = f[3]
+	-- Someone in the same fight already reported it (perhaps me): one victory.
+	local last = recentKill[victim]
+	if last and GetTime() - last < KILL_SAME then
+		for _, k in pairs(db.kills) do
+			if k.victim == victim and math.abs(k.time - stamp) < KILL_SAME and k.killer ~= sender then
+				k.helpers = k.helpers or {}
+				if not tContains(k.helpers, sender) then table.insert(k.helpers, sender) end
+			end
+		end
+		Changed()
+		return
+	end
+	recentKill[victim] = GetTime()
+	local k = {
+		id = f[2], killer = sender, victim = victim, guid = f[4] ~= "" and f[4] or nil, level = tonumber(f[5]),
+		class = f[6] ~= "" and f[6] or nil, race = f[7] ~= "" and f[7] or nil, zone = f[8] or "", time = stamp,
+		hk = f[10] == "1" or nil,
+	}
+	if AddKill(k) then Celebrate(k, false) end
+end
+
+local function InGroup(unit)
+	if not UnitExists(unit) then return false end
+	if Plain(UnitIsUnit(unit, "player")) then return true end
+	if UnitInParty and Plain(UnitInParty(unit)) then return true end
+	if UnitInRaid and Plain(UnitInRaid(unit)) then return true end
+	return false
+end
+
+-- Called for every unit event: remembers hostile players, whether we are
+-- fighting them, and notices when one dies.
+local function Watch(unit)
+	if type(unit) ~= "string" or unit == "player" or not UnitExists(unit) or not Plain(UnitIsPlayer(unit)) then return end
+	if Statskontoret.InPvPInstance() then return end
+	local guid, name = Plain(UnitGUID(unit)), Plain(UnitName(unit))
+	if not name then return end
+	local key = guid or ("n:" .. name)
+	local dead = Plain(UnitIsDeadOrGhost(unit)) and not (UnitIsFeignDeath and Plain(UnitIsFeignDeath(unit)))
+	local foe = foes[key]
+	if not foe then
+		if dead or not Plain(UnitCanAttack("player", unit)) then return end
+		-- Duels and mind control are the same faction: not a victory.
+		local theirs, ours = Plain(UnitFactionGroup(unit)), Plain(UnitFactionGroup("player"))
+		if theirs and ours and theirs == ours then return end
+		local _, class = UnitClass(unit)
+		foe = { name = name, guid = guid, class = Plain(class), race = Plain(UnitRace(unit)) }
+		foes[key] = foe
+	end
+	local level = Plain(UnitLevel(unit))
+	if level then foe.level = level end
+	local now = GetTime()
+	if not dead then
+		foe.alive = now
+		if (Plain(UnitIsUnit(unit, "target")) and Plain(UnitAffectingCombat("player"))) or InGroup(unit .. "target") then
+			foe.fought = now
+		end
+	elseif foe.alive and foe.fought and now - foe.fought <= FIGHT_WINDOW then
+		-- UnitIsFeignDeath only works on the group: a feigning hunter still has health.
+		local hp = Plain(UnitHealth(unit))
+		if foe.class == "HUNTER" and hp and hp > 0 then return end
+		foe.alive = nil
+		Kill(foe)
+	end
+end
+
+-- Forget hostile players not seen for ten minutes.
+local function PruneFoes()
+	local cutoff = GetTime() - 600
+	for key, foe in pairs(foes) do
+		if (foe.alive or 0) < cutoff and (foe.fought or 0) < cutoff then foes[key] = nil end
+	end
+end
+
+-- "%s dies, honorable kill ..." as a pattern capturing the name.
+local honorPatterns
+local function ToPattern(fmt)
+	if type(fmt) ~= "string" then return nil end
+	local p = fmt:gsub("%%%d*%$?s", "\001"):gsub("%%%d*%$?d", "\002")
+	p = p:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
+	p = p:gsub("\001", "(.+)"):gsub("\002", "%%d+")
+	return "^" .. p
+end
+
+local function OnHonor(msg)
+	msg = Plain(msg)
+	if type(msg) ~= "string" then return end
+	if not honorPatterns then
+		honorPatterns = {}
+		for _, fmt in ipairs({ COMBATLOG_HONORGAIN, COMBATLOG_HONORGAIN_NO_RANK }) do
+			local p = ToPattern(fmt)
+			if p then table.insert(honorPatterns, p) end
+		end
+	end
+	for _, p in ipairs(honorPatterns) do
+		local name = msg:match(p)
+		if name then
+			name = ns.Short(name)
+			local found
+			for _, foe in pairs(foes) do
+				if foe.name == name then found = foe end
+			end
+			Kill(found or { name = name }, true)
+			return
+		end
+	end
+end
+
+-- Members with the addon already have the celebration: hide the guild chat
+-- copy (our own exactly; others' "Polisen:" line when their K came lately).
+if ChatFrame_AddMessageEventFilter then
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_GUILD", function(_, _, msg, author)
+		msg, author = Plain(msg), Plain(author)
+		if not db or type(msg) ~= "string" then return end
+		if ownCopy[msg] then return true end
+		if type(author) ~= "string" or not msg:match("^Polisen: ") then return end
+		local t = heardKill[ns.Short(author)]
+		if t and GetTime() - t < 60 then return true end
+	end)
+end
+
+-- Victories, newest first.
+function ns.Kills()
+	local list = {}
+	for _, k in pairs(db.kills) do table.insert(list, k) end
+	table.sort(list, function(a, b) return a.time > b.time end)
+	return list
+end
+
+---------------------------------------------------------------------------
 -- Tooltips on reported players.
 
 local function OnTooltipUnit(tooltip)
@@ -391,6 +711,9 @@ local function OnTooltipUnit(tooltip)
 	tooltip:AddLine(string.format("Polisen: %d anmälning%s", s.count, s.count == 1 and "" or "ar"), 1, 0.2, 0.2)
 	if s.last then
 		tooltip:AddLine(string.format("Senast: dödade %s i %s %s", s.last.victim, s.last.zone, ns.Ago(s.last.time)), 1, 0.5, 0.5)
+	end
+	if s.kills then
+		tooltip:AddLine(string.format("Fälld av gillet %d gång%s", s.kills, s.kills == 1 and "" or "er"), 0.3, 1, 0.3)
 	end
 	tooltip:Show()
 end
@@ -417,6 +740,7 @@ local function OnAddonMessage(prefix, msg, channel, sender)
 	elseif f[1] == "I" then OnIncident(f)
 	elseif f[1] == "E" then OnEnd(f)
 	elseif f[1] == "S" then OnSeen(sender, f)
+	elseif f[1] == "K" then OnKill(sender, f)
 	end
 end
 
@@ -455,7 +779,8 @@ end
 local events = CreateFrame("Frame")
 -- No combat log: Forever's client (like current retail) blocks addons from it.
 for _, event in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_LOGOUT", "CHAT_MSG_ADDON",
-	"NAME_PLATE_UNIT_ADDED", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT" }) do
+	"NAME_PLATE_UNIT_ADDED", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT",
+	"UNIT_HEALTH", "UNIT_FLAGS", "UNIT_TARGET", "CHAT_MSG_COMBAT_HONOR_GAIN" }) do
 	pcall(events.RegisterEvent, events, event)
 end
 
@@ -466,7 +791,9 @@ events:SetScript("OnEvent", function(_, event, ...)
 			db = PolisenDB
 			db.incidents = db.incidents or {}
 			db.forgotten = db.forgotten or {}
+			db.kills = db.kills or {}
 			if db.alarm == nil then db.alarm = true end
+			if db.guildChat == nil then db.guildChat = true end
 			ns.db = db
 			-- Upgrading from 0.3 (no db.synced): start from the newest incident
 			-- as it is now, before deaths heard after login can move it.
@@ -481,18 +808,22 @@ events:SetScript("OnEvent", function(_, event, ...)
 		local register = C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix or RegisterAddonMessagePrefix
 		if register then register(ns.PREFIX) end
 		C_Timer.After(20, StartSync)
+		C_Timer.NewTicker(300, PruneFoes)
 	elseif event == "CHAT_MSG_ADDON" then
 		OnAddonMessage(...)
 	elseif event == "PLAYER_LOGOUT" then
 		if sync.done then db.synced = Now() end
-	elseif not next(ns.suspects) then
-		return   -- nobody reported: nothing to look for
-	elseif event == "NAME_PLATE_UNIT_ADDED" then
-		CheckUnit(...)
-	elseif event == "PLAYER_TARGET_CHANGED" then
-		CheckUnit("target")
-	elseif event == "UPDATE_MOUSEOVER_UNIT" then
-		CheckUnit("mouseover")
+	elseif event == "UNIT_HEALTH" or event == "UNIT_FLAGS" or event == "UNIT_TARGET" then
+		Watch((...))
+	elseif event == "CHAT_MSG_COMBAT_HONOR_GAIN" then
+		OnHonor((...))
+	else
+		local unit = event == "NAME_PLATE_UNIT_ADDED" and (...)
+			or event == "PLAYER_TARGET_CHANGED" and "target"
+			or event == "UPDATE_MOUSEOVER_UNIT" and "mouseover"
+		Watch(unit)
+		-- Sightings: only when somebody is reported.
+		if next(ns.suspects) then CheckUnit(unit) end
 	end
 end)
 
@@ -510,9 +841,16 @@ SlashCmdList.POLISEN = function(msg)
 	elseif cmd == "tyst" then
 		db.quiet = not db.quiet
 		Print(db.quiet and "visar inte längre när andra i gillet ser efterlysta." or "visar när andra i gillet ser efterlysta.")
+	elseif cmd == "gillet" then
+		db.guildChat = not db.guildChat
+		Print(db.guildChat and "dina segrar skrivs nu också i gillechatten (för medlemmar utan addonen)."
+			or "dina segrar skrivs inte längre i gillechatten.")
+	elseif cmd == "jubel" then
+		db.noCheer = not db.noCheer
+		Print(db.noCheer and "segrar firas bara i chatten." or "segrar firas med text på skärmen och ljud.")
 	elseif cmd == "" then
 		ns.ToggleWindow()
 	else
-		Print("/polisen öppnar fönstret, /polisen larm slår av eller på varningen på skärmen, /polisen tyst döljer andras observationer.")
+		Print("/polisen öppnar fönstret, /polisen larm slår av eller på varningen på skärmen, /polisen tyst döljer andras observationer, /polisen jubel slår av eller på firandet av segrar på skärmen, /polisen gillet slår av eller på dina segrar i gillechatten.")
 	end
 end

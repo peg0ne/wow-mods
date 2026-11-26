@@ -29,7 +29,8 @@ globals = {
 -- clients (see "The Forever client" in README.md).
 read_globals = {
 	"GetChannelList", "EnumerateServerChannels", "LeaveChannelByName", "JoinChannelByName", "ChatFrame_AddChannel", "ChatFrameUtil",
-	"LOOT_ITEM_SELF", "LOOT_ITEM_SELF_MULTIPLE", "UnitXP", "UnitXPMax", "UnitIsFeignDeath", "GetInstanceInfo",
+	"LOOT_ITEM_SELF", "LOOT_ITEM_SELF_MULTIPLE", "UnitXP", "UnitXPMax", "UnitIsFeignDeath", "GetInstanceInfo", "UnitHealth", "UnitAffectingCombat", "tContains",
+	"COMBATLOG_HONORGAIN", "COMBATLOG_HONORGAIN_NO_RANK",
 	"UnitQuestTrivialLevelRange", "GetQuestGreenRange", "QuestDifficultyColors", "GetServerTime", "GossipFrame", "InCombatLockdown", "QuestFrame",
 	"AcceptQuest", "Ambiguate", "BackdropTemplateMixin", "BokforingFrame", "BokforingDB", "Auctionator", "C_AuctionHouse", "AuctionHouseFrame", "ChatEdit_InsertLink", "GetItemStats", "GetItemInfoInstant", "ITEM_QUALITY_COLORS", "StaticPopup_Show", "OKAY", "CANCEL", "MenuUtil", "ReloadUI",
 	"GetMerchantNumItems", "GetMerchantItemID", "GetMerchantItemInfo", "C_MerchantFrame", "GetItemCount", "ProfessionsFrame", "TradeSkillFrame",

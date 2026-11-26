@@ -1,7 +1,8 @@
 -- Polisen, the /polisen window, in the style of Skatteverket's panel, with
--- two tabs at the top (0.4.1; they were under the window):
+-- tabs at the top (0.4.1; they were under the window):
 --   Efterlysta   reported players, most reports first
 --   Händelser    every incident, newest first
+--   Segrar       hostile players the guild killed (0.5), newest first
 -- Hover a wanted player for their victims. "Glöm" forgets a player on this
 -- computer only (the guild keeps its own records).
 
@@ -13,10 +14,12 @@ local WIDTH = 740
 local COLS = {
 	wanted = { 200, 150, 110, 240 },
 	log = { 120, 180, 200, 200 },
+	kills = { 120, 200, 220, 160 },
 }
 local HEADERS = {
 	wanted = { "Efterlyst", "Klass, nivå", "Anmälningar", "Senast" },
 	log = { "När", "Offer", "Gärningsman", "Plats" },
+	kills = { "När", "Segrare", "Fälld", "Plats" },
 }
 
 local frame, rows, headers, list = nil, {}, {}, {}
@@ -48,6 +51,10 @@ local function ShowTooltip(row)
 	GameTooltip:AddLine("Offer:", 1, 0.5, 0.5)
 	for victim, n in pairs(item.victims) do
 		GameTooltip:AddLine(n > 1 and string.format("%s (%d gånger)", victim, n) or victim, 1, 1, 1)
+	end
+	if item.kills then
+		GameTooltip:AddLine(" ")
+		GameTooltip:AddLine(string.format("Fälld av gillet %d gång%s", item.kills, item.kills == 1 and "" or "er"), 0.3, 1, 0.3)
 	end
 	GameTooltip:Show()
 end
@@ -84,7 +91,7 @@ local function Build()
 	local dy, left = classic and -12 or 0, classic and 66 or 24
 
 	-- Tabs beside the portrait, where the other windows have their heading.
-	frame.tabs = Statskontoret.Tabs(frame, { { "wanted", "Efterlysta" }, { "log", "Händelser" } }, SetMode)
+	frame.tabs = Statskontoret.Tabs(frame, { { "wanted", "Efterlysta" }, { "log", "Händelser" }, { "kills", "Segrar" } }, SetMode)
 	frame.tabs:SetPoint("TOPLEFT", left - 4, -28)
 
 	for c = 1, #HEADERS.wanted do
@@ -148,7 +155,7 @@ end
 
 function ns.RefreshWindow()
 	if not frame or not frame:IsShown() then return end
-	list = mode == "wanted" and ns.Wanted() or ns.Incidents()
+	list = mode == "wanted" and ns.Wanted() or mode == "kills" and ns.Kills() or ns.Incidents()
 	local found = false
 	for _, item in ipairs(list) do
 		if item.key and item.key == selected then found = true end
@@ -165,6 +172,13 @@ function ns.RefreshWindow()
 				c[2]:SetText(string.format("%s, %s", ns.ClassName(item.class), ns.LevelText(item.level)))
 				c[3]:SetText(tostring(item.count))
 				c[4]:SetText(string.format("%s, %s", item.last.victim, ns.Ago(item.last.time)))
+			elseif mode == "kills" then
+				c[1]:SetText(ns.Ago(item.time))
+				local who = item.killer
+				if item.helpers and #item.helpers > 0 then who = who .. " med " .. table.concat(item.helpers, ", ") end
+				c[2]:SetText(who)
+				c[3]:SetText(ns.ClassText(item.class, item.victim) .. (item.wanted and " |cffff4040(efterlyst)|r" or ""))
+				c[4]:SetText(item.zone)
 			else
 				c[1]:SetText(ns.Ago(item.time))
 				c[2]:SetText(item.victim)
@@ -192,10 +206,13 @@ function ns.RefreshWindow()
 	end
 
 	frame.scroll:Update(offset, ROWS, #list)
-	if #list == 0 then
+	if #list == 0 and mode == "kills" then
+		frame.count:SetText("Inga segrar än. När någon i gillet med Polisen 0.5 fäller en fientlig spelare hamnar den här.")
+	elseif #list == 0 then
 		frame.count:SetText("Inga anmälningar. När en fientlig spelare dödar någon i gillet som har Rättsmedicinalverket hamnar den här.")
 	else
 		local what = mode == "wanted" and "Fientliga spelare som dödat medlemmar de senaste 30 dagarna, flest anmälningar först."
+			or mode == "kills" and "Fientliga spelare som gillet fällt de senaste 30 dagarna, nyast först."
 			or "Varje gång en fientlig spelare dödat en medlem, nyast först."
 		local range = #list > ROWS and string.format("  Visar %d-%d av %d.", offset + 1, math.min(offset + ROWS, #list), #list) or ""
 		frame.count:SetText(what .. range)

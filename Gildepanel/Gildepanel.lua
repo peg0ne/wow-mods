@@ -984,6 +984,8 @@ local SETTINGS = {
 	{ addon = "Polisen", tab = "guild", title = "Polisen", db = "PolisenDB", items = {
 		{ key = "alarm", label = "Varning på skärmen och ljud", default = true },
 		{ key = "quiet", label = "Visa andras observationer", invert = true },
+		{ key = "noCheer", label = "Fira segrar med text på skärmen och ljud", invert = true },
+		{ key = "guildChat", label = "Skriv mina segrar i gillechatten", default = true },
 	} },
 	-- trackerMode is "zone" or nil; any value counts as checked.
 	{ addon = "QuestLogSort", tab = "quests", title = "QuestLogSort", db = "QuestLogSortDB", items = {
