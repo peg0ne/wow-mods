@@ -178,10 +178,19 @@ local function Show()
 	line:Show()
 end
 
+-- The nameplate is only wanted on objects (0.1.2). On an NPC it hides the
+-- game's floating name, and with it the line under it ("<Blacksmithing
+-- Trainer>"), so it is switched off while the soft target is a creature.
+local function PlateFor(guid)
+	local want = (guid and not guid:match("^GameObject")) and "0" or "1"
+	if GetSetting("SoftTargetNameplateInteract") ~= want then SetSetting("SoftTargetNameplateInteract", want) end
+end
+
 local function OnSoftChanged()
 	current = nil
 	local guid = ns.Plain(UnitGUID("softinteract"))
 	local name = ns.Plain(UnitName("softinteract"))
+	PlateFor(guid)
 	if guid and name then
 		local kind, need = ns.NodeInfo(name)
 		if kind and ns.ShowKind(kind) then
